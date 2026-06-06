@@ -327,7 +327,7 @@ async function startSocket() {
       if (wasReconnection && lastDisconnectTime) {
         const offlineMin = Math.round((Date.now() - lastDisconnectTime) / 60000);
         const ownerRaw = (process.env.WHATSAPP_ALLOWED_USERS || '').split(',')[0].trim().replace(/\D/g, '');
-        if (ownerRaw) {
+        if (ownerRaw && offlineMin >= 5) {
           setTimeout(async () => {
             try {
               const ownerJid = `${ownerRaw}@s.whatsapp.net`;
