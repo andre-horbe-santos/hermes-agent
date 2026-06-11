@@ -99,7 +99,7 @@ CODEX_OAUTH_TOKEN_URL = "https://auth.openai.com/oauth/token"
 CODEX_ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 120
 XAI_OAUTH_ISSUER = "https://auth.x.ai"
 XAI_OAUTH_DISCOVERY_URL = f"{XAI_OAUTH_ISSUER}/.well-known/openid-configuration"
-XAI_OAUTH_CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828"
+XAI_OAUTH_CLIENT_ID = os.environ.get("XAI_OAUTH_CLIENT_ID", "b1a00492-073a-47ea-816f-4c329264a828")
 XAI_OAUTH_SCOPE = "openid profile email offline_access grok-cli:access api:access"
 XAI_OAUTH_REDIRECT_HOST = "127.0.0.1"
 XAI_OAUTH_REDIRECT_PORT = 56121
@@ -110,7 +110,7 @@ XAI_OAUTH_REDIRECT_PATH = "/callback"
 # leaving brief but noisy credential-expiry gaps. Refresh up to one hour
 # early so ordinary runtime calls keep the token warm without user reauth.
 XAI_ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 3600
-QWEN_OAUTH_CLIENT_ID = "f0304373b74a44d2b584a3fb70ca9e56"
+QWEN_OAUTH_CLIENT_ID = os.environ.get("QWEN_OAUTH_CLIENT_ID", "f0304373b74a44d2b584a3fb70ca9e56")
 QWEN_OAUTH_TOKEN_URL = "https://chat.qwen.ai/api/v1/oauth2/token"
 QWEN_ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 120
 DEFAULT_SPOTIFY_ACCOUNTS_BASE_URL = "https://accounts.spotify.com"

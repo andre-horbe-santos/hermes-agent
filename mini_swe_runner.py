@@ -218,7 +218,7 @@ class MiniSWERunner:
             if self.client is None:
                 from openai import OpenAI
                 self.client = OpenAI(
-                    base_url="https://openrouter.ai/api/v1",
+                    base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
                     api_key=os.getenv("OPENROUTER_API_KEY", ""))
         
         # Environment will be created per-task

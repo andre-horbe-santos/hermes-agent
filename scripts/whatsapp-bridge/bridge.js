@@ -464,7 +464,7 @@ async function startSocket() {
               }
             }
             if (_body || _hasMedia) {
-              fetch('http://127.0.0.1:9201/whatsapp-crm-apollo', {
+              fetch(process.env.APOLLO_CRM_WEBHOOK_URL || 'http://127.0.0.1:9201/whatsapp-crm-apollo', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
