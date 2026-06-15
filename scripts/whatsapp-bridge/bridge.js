@@ -666,6 +666,45 @@ async function startSocket() {
       // Bot mode: skip regular fromMe DMs (not commands) to avoid echo-back loops.
       // This check is placed after command interception so !wa / !index-list still work.
       if (msg.key.fromMe && !isGroup && WHATSAPP_MODE === 'bot') {
+        // CRM passthrough: loga mensagens enviadas por André ao contato (áudio, texto, mídia)
+        try {
+          const _mc = getMessageContent(msg);
+          const _body = _mc?.conversation || _mc?.extendedTextMessage?.text
+            || _mc?.imageMessage?.caption || _mc?.videoMessage?.caption || '';
+          const _hasMedia = !!(_mc?.imageMessage || _mc?.videoMessage
+            || _mc?.audioMessage || _mc?.pttMessage || _mc?.documentMessage);
+          const _mediaType = _mc?.pttMessage ? 'ptt' : _mc?.audioMessage ? 'audio'
+            : _mc?.imageMessage ? 'image' : _mc?.videoMessage ? 'video'
+            : _mc?.documentMessage ? 'document' : '';
+          let _mediaPath = '';
+          if (_hasMedia && (_mediaType === 'ptt' || _mediaType === 'audio')) {
+            try {
+              const _audioMsg = _mc?.pttMessage || _mc?.audioMessage;
+              const _buf = await downloadMediaMessage(msg, 'buffer', {}, { logger, reuploadRequest: sock.updateMediaMessage });
+              const _mime = _audioMsg?.mimetype || 'audio/ogg';
+              const _ext = _mime.includes('ogg') ? '.ogg' : _mime.includes('mp4') ? '.m4a' : '.ogg';
+              mkdirSync(AUDIO_CACHE_DIR, { recursive: true });
+              const _fp = path.join(AUDIO_CACHE_DIR, `aud_${randomBytes(6).toString('hex')}${_ext}`);
+              writeFileSync(_fp, _buf);
+              _mediaPath = _fp;
+            } catch (_err) {
+              console.error('[bridge] CRM fromMe: falha ao baixar áudio:', _err.message);
+            }
+          }
+          if (_body || _hasMedia) {
+            fetch(process.env.APOLLO_CRM_WEBHOOK_URL || 'http://127.0.0.1:9201/whatsapp-crm-apollo', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chatId, senderId: chatId,
+                pushName: sock.user?.name || 'André',
+                body: _body, hasMedia: _hasMedia, mediaType: _mediaType,
+                mediaPath: _mediaPath,
+                fromMe: true,
+              }),
+            }).catch(() => {});
+          }
+        } catch {}
         continue;
       }
 
