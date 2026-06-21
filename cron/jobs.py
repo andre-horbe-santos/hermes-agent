@@ -1466,6 +1466,11 @@ def _get_due_jobs_locked() -> List[Dict[str, Any]]:
 
         raw_next_run_dt = datetime.fromisoformat(next_run)
         schedule = job.get("schedule", {})
+        if isinstance(schedule, str):
+            try:
+                schedule = parse_schedule(schedule)
+            except Exception:
+                schedule = {}
         kind = schedule.get("kind")
 
         next_run_dt = _ensure_aware(raw_next_run_dt)
@@ -1508,7 +1513,6 @@ def _get_due_jobs_locked() -> List[Dict[str, Any]]:
                 continue
 
         if next_run_dt <= now:
-
             # For recurring jobs, check if the scheduled time is stale
             # (gateway was down and missed the window). Fast-forward to
             # the next future occurrence instead of firing a stale run.
