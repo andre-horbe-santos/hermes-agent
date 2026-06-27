@@ -1,0 +1,7 @@
+interface:
+  display_name: "Third-Party Skill Review"
+  short_description: "Review external skills for trust and fit."
+  default_prompt: "Use $third-party-skill-review to assess an external skill's trust, risk, and fit before enabling it."
+
+policy:
+  allow_implicit_invocation: true
