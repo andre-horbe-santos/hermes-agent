@@ -25,46 +25,18 @@ Review external skills as individual supply-chain artifacts. Confirm what the sk
 ## Prerequisites
 
 - Access to the skill repository or extracted skill directory
-- `shared/governance/SKILLS-INTAKE.md`
+- `references/policy.md`
 - `shared/governance/SKILL-CARD-TEMPLATE.md`
 - `scripts/verify_skill_signature.sh` when a detached signature exists
 
 ## Procedure
 
-1. Review the skill as a unit:
-   - `SKILL.md`
-   - scripts
-   - references
-   - assets
-   - network destinations
-   - required secrets
-2. Classify the skill:
-   - `advisory`
-   - `operational`
-   - `deploy`
-3. Search for risky patterns:
-   - `subprocess`
-   - `os.system`
-   - `eval(`
-   - `exec(`
-   - `pip install`
-   - `docker run`
-   - `curl`
-   - `wget`
+1. Read `references/policy.md`.
+2. Review the skill as a unit.
+3. Classify the risk.
 4. Fill the skill card.
 5. Verify signature if present.
-6. Decide:
-   - approve
-   - approve with restrictions
-   - reject
-
-## Decision Rules
-
-- Allowlist by skill, never by repository.
-- Prefer signed skills when a publisher provides signatures and a trust anchor.
-- Treat install/deploy helpers as higher risk than read-only skills.
-- Require explicit trust confirmation for non-local endpoints.
-- Never accept prompts that ask for API keys, bearer tokens, cookies, or passwords.
+6. Decide: approve, approve with restrictions, or reject.
 
 ## Verification
 
