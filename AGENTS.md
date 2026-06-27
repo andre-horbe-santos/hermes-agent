@@ -939,6 +939,17 @@ violate them.
    prose, and re-explanations of env vars already in
    `## Prerequisites`.
 
+### External skill intake policy
+
+When evaluating skills from third-party repositories:
+
+1. **Allowlist per skill, never per repository.** Review each skill directory as its own trust boundary.
+2. **Prefer signed skills.** If the publisher ships detached signatures (for example OMS/Sigstore-style bundles), verify them before enablement.
+3. **Require a human review surface.** For non-trivial skills, add or request a `skill-card.md` summarizing purpose, secrets, network destinations, scripts, and risk class.
+4. **Separate "use" from "deploy".** Skills that install packages, run Docker, start services, or mutate infra must be treated as deploy skills, not routine helper skills.
+5. **No secrets in prompts.** Skills must not ask users to paste API keys, bearer tokens, cookies, or passwords into chat; secrets belong in env vars, files, or connector config.
+6. **Trust-gate non-local endpoints.** If a skill sends data to a non-local backend, it should present the exact destination and require explicit trust confirmation.
+
 6. **Scripts go in `scripts/`, references in `references/`,
    templates in `templates/`.** Don't expect the model to inline-write
    parsers, XML walkers, or non-trivial logic every call — ship a
