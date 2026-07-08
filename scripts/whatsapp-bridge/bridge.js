@@ -76,6 +76,11 @@ const ALLOWED_USERS = parseAllowedUsers(process.env.WHATSAPP_ALLOWED_USERS || ''
 const COMMAND_USERS = parseAllowedUsers(process.env.WHATSAPP_COMMAND_USERS || '');
 const APOLLO_WEBHOOK_URL = process.env.APOLLO_WEBHOOK_URL || 'http://127.0.0.1:9201/webhook/apollo/send';
 const APOLLO_INDEX_LIST_URL = process.env.APOLLO_INDEX_LIST_URL || 'http://127.0.0.1:9201/webhook/apollo/index-list';
+const VOICE_CLONE_WEBHOOK_URL = process.env.VOICE_CLONE_WEBHOOK_URL || 'http://127.0.0.1:9202/voice-clone/command';
+// !voz: lembra o último áudio recebido de cada remetente autorizado, pra converter
+// quando o comando de texto chegar em seguida (voice notes não têm legenda no WhatsApp).
+const lastAudioBySender = new Map(); // senderId -> { path, chatId, ts }
+const VOICE_CLONE_AUDIO_TTL_MS = 15 * 60 * 1000; // 15 min pra usar !voz depois de mandar o áudio
 const DEFAULT_REPLY_PREFIX = '⚕ *Hermes Agent*\n────────────\n';
 const REPLY_PREFIX = process.env.WHATSAPP_REPLY_PREFIX === undefined
   ? DEFAULT_REPLY_PREFIX
@@ -542,6 +547,9 @@ async function startSocket() {
           const filePath = path.join(AUDIO_CACHE_DIR, `aud_${randomBytes(6).toString('hex')}${ext}`);
           writeFileSync(filePath, buf);
           mediaUrls.push(filePath);
+          if (COMMAND_USERS.size > 0 && matchesAllowedUser(senderId, COMMAND_USERS, SESSION_DIR)) {
+            lastAudioBySender.set(senderId, { path: filePath, chatId, ts: Date.now() });
+          }
         } catch (err) {
           console.error('[bridge] Failed to download audio:', err.message);
         }
@@ -660,6 +668,64 @@ async function startSocket() {
             continue; // Don't queue — LLM never sees this message
           }
           // No URL provided — fall through so LLM can ask for it
+        }
+      }
+
+      // !voz command — converte o último áudio recebido do remetente pra voz do
+      // Jefferson (envia de volta pra ele ouvir), ou envia o último convertido pro
+      // contato final com "!voz enviar <numero_ou_nome>".
+      const _vzBody = body.trim();
+      if (_vzBody.toLowerCase().startsWith('!voz')) {
+        const _isCommandUser = COMMAND_USERS.size > 0 && matchesAllowedUser(senderId, COMMAND_USERS, SESSION_DIR);
+        if (msg.key.fromMe || _isCommandUser) {
+          const _vzArg = _vzBody.slice(4).trim();
+          const _sendMatch = _vzArg.match(/^enviar\s+(.+)$/i);
+          if (_sendMatch) {
+            const _target = _sendMatch[1].trim();
+            console.log(JSON.stringify({ event: 'voz_send_command', target: _target, from: senderId }));
+            (async () => {
+              try {
+                const _resp = await fetch(VOICE_CLONE_WEBHOOK_URL, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'send', senderId, chatId, target: _target }),
+                });
+                const _data = await _resp.json().catch(() => ({}));
+                console.log(JSON.stringify({ event: 'voz_send_result', status: _resp.status, data: _data }));
+              } catch (_err) {
+                console.error('[bridge] !voz enviar failed:', _err.message);
+              }
+            })();
+          } else {
+            const _pending = lastAudioBySender.get(senderId);
+            if (!_pending || (Date.now() - _pending.ts) > VOICE_CLONE_AUDIO_TTL_MS) {
+              (async () => {
+                try {
+                  await fetch(`http://127.0.0.1:${PORT}/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chatId, message: 'Não achei nenhum áudio seu recente (últimos 15 min). Manda a nota de voz e depois !voz.' }),
+                  });
+                } catch {}
+              })();
+            } else {
+              console.log(JSON.stringify({ event: 'voz_convert_command', audioPath: _pending.path, from: senderId }));
+              (async () => {
+                try {
+                  const _resp = await fetch(VOICE_CLONE_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'convert', senderId, chatId, audioPath: _pending.path }),
+                  });
+                  const _data = await _resp.json().catch(() => ({}));
+                  console.log(JSON.stringify({ event: 'voz_convert_result', status: _resp.status, data: _data }));
+                } catch (_err) {
+                  console.error('[bridge] !voz convert failed:', _err.message);
+                }
+              })();
+            }
+          }
+          continue; // Don't queue — LLM never sees this message
         }
       }
 
