@@ -96,4 +96,3 @@ def test_config_users_endpoint_requires_platform_admin(monkeypatch):
         "andre.santos@konceptogc.com",
         "jefferson.frasnelli@konceptogc.com",
     }
-

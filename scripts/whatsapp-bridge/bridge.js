@@ -219,6 +219,19 @@ function buildLidMap() {
 }
 let lidToPhone = buildLidMap();
 
+// Mensagens endereçadas a um JID @lid às vezes não aparecem no chat "normal"
+// (baseado no telefone) do destinatário — a UI do WhatsApp pode tratá-los como
+// threads diferentes. Resolve pro JID de telefone sempre que formos NÓS a
+// iniciar o envio de uma resposta (ex: prévia do !voz).
+function resolvePhoneJidForReply(id) {
+  if (id && id.endsWith('@lid')) {
+    const lidNum = id.replace(/@.*/, '');
+    const phone = lidToPhone[lidNum];
+    if (phone) return `${phone}@s.whatsapp.net`;
+  }
+  return id;
+}
+
 const logger = pino({ level: 'warn' });
 
 // Message queue for polling
@@ -547,7 +560,15 @@ async function startSocket() {
           const filePath = path.join(AUDIO_CACHE_DIR, `aud_${randomBytes(6).toString('hex')}${ext}`);
           writeFileSync(filePath, buf);
           mediaUrls.push(filePath);
-          if (COMMAND_USERS.size > 0 && matchesAllowedUser(senderId, COMMAND_USERS, SESSION_DIR)) {
+          // Só guarda como "último áudio pro !voz" se for de um remetente autorizado
+          // E a mensagem for recente de verdade (msg.messageTimestamp, não o momento
+          // em que processamos aqui). Depois de um restart, Baileys ressincroniza
+          // histórico antigo — sem checar o timestamp real, uma nota de voz de dias
+          // atrás podia sobrescrever lastAudioBySender antes da gravação de teste.
+          const _msgAgeSec = Date.now() / 1000 - Number(msg.messageTimestamp || 0);
+          const _isAuthorizedSender = msg.key.fromMe
+            || (COMMAND_USERS.size > 0 && matchesAllowedUser(senderId, COMMAND_USERS, SESSION_DIR));
+          if (_isAuthorizedSender && _msgAgeSec >= 0 && _msgAgeSec < 120) {
             lastAudioBySender.set(senderId, { path: filePath, chatId, ts: Date.now() });
           }
         } catch (err) {
@@ -678,6 +699,14 @@ async function startSocket() {
       if (_vzBody.toLowerCase().startsWith('!voz')) {
         const _isCommandUser = COMMAND_USERS.size > 0 && matchesAllowedUser(senderId, COMMAND_USERS, SESSION_DIR);
         if (msg.key.fromMe || _isCommandUser) {
+          // Prévia/erros do !voz sempre respondem no JID de telefone — um
+          // chatId @lid pode cair numa thread que o WhatsApp do operador não
+          // mostra como a conversa "normal" com o bridge.
+          const _replyChatId = resolvePhoneJidForReply(chatId);
+          // Telefone do operador já resolvido (não o @lid cru) — o webhook Python
+          // usa isso pra decidir se o envio final sai pela conta Unipile do
+          // próprio operador (ex: Jefferson) em vez do bridge do André.
+          const _senderPhone = resolvePhoneJidForReply(senderId).replace(/@.*/, '');
           const _vzArg = _vzBody.slice(4).trim();
           const _sendMatch = _vzArg.match(/^enviar\s+(.+)$/i);
           if (_sendMatch) {
@@ -688,7 +717,7 @@ async function startSocket() {
                 const _resp = await fetch(VOICE_CLONE_WEBHOOK_URL, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ action: 'send', senderId, chatId, target: _target }),
+                  body: JSON.stringify({ action: 'send', senderId, senderPhone: _senderPhone, chatId: _replyChatId, target: _target }),
                 });
                 const _data = await _resp.json().catch(() => ({}));
                 console.log(JSON.stringify({ event: 'voz_send_result', status: _resp.status, data: _data }));
@@ -704,7 +733,7 @@ async function startSocket() {
                   await fetch(`http://127.0.0.1:${PORT}/send`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chatId, message: 'Não achei nenhum áudio seu recente (últimos 15 min). Manda a nota de voz e depois !voz.' }),
+                    body: JSON.stringify({ chatId: _replyChatId, message: 'Não achei nenhum áudio seu recente (últimos 15 min). Manda a nota de voz e depois !voz.' }),
                   });
                 } catch {}
               })();
@@ -715,7 +744,7 @@ async function startSocket() {
                   const _resp = await fetch(VOICE_CLONE_WEBHOOK_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'convert', senderId, chatId, audioPath: _pending.path }),
+                    body: JSON.stringify({ action: 'convert', senderId, senderPhone: _senderPhone, chatId: _replyChatId, audioPath: _pending.path }),
                   });
                   const _data = await _resp.json().catch(() => ({}));
                   console.log(JSON.stringify({ event: 'voz_convert_result', status: _resp.status, data: _data }));

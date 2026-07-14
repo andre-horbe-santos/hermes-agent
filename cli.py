@@ -1196,6 +1196,7 @@ from hermes_cli.worktree import (
     _normalize_git_bash_path,
     _git_repo_root,
     _path_is_within_root,
+    _resolve_worktree_base,
     _setup_worktree,
     _worktree_has_unpushed_commits,
     _cleanup_worktree,
