@@ -867,7 +867,13 @@ app.post('/send', async (req, res) => {
     const chunks = splitLongMessage(formatOutgoingMessage(message));
     const messageIds = [];
     for (let i = 0; i < chunks.length; i += 1) {
-      const sent = await sendWithTimeout(chatId, { text: chunks[i] });
+      // linkPreview: null pula a geração automática de preview do Baileys —
+      // sem isso, message.linkPreview fica undefined e o Baileys tenta
+      // importar link-preview-js (dependência opcional não instalada aqui),
+      // lança ERR_MODULE_NOT_FOUND e o envio falha silenciosamente sempre
+      // que o texto contém uma URL (achado real: envio de links de LinkedIn
+      // pro André, 16/07 — API respondeu success mas a mensagem não chegou).
+      const sent = await sendWithTimeout(chatId, { text: chunks[i], linkPreview: null });
       trackSentMessageId(sent);
       if (sent?.key?.id) messageIds.push(sent.key.id);
       if (chunks.length > 1 && i < chunks.length - 1) {
@@ -901,10 +907,10 @@ app.post('/edit', async (req, res) => {
     const chunks = splitLongMessage(formatOutgoingMessage(message));
     const messageIds = [];
 
-    await sendWithTimeout(chatId, { text: chunks[0], edit: key });
+    await sendWithTimeout(chatId, { text: chunks[0], edit: key, linkPreview: null });
     if (chunks.length > 1) {
       for (let i = 1; i < chunks.length; i += 1) {
-        const sent = await sendWithTimeout(chatId, { text: chunks[i] });
+        const sent = await sendWithTimeout(chatId, { text: chunks[i], linkPreview: null });
         trackSentMessageId(sent);
         if (sent?.key?.id) messageIds.push(sent.key.id);
         if (i < chunks.length - 1) {
