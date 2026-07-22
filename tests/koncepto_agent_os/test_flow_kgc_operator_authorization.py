@@ -8,8 +8,10 @@ from pathlib import Path
 
 
 def _load_dashboard_app():
-    repo_root = Path(__file__).resolve().parents[2]
-    app_path = repo_root / "koncepto-agent-os" / "dashboard" / "app.py"
+    # The dashboard lives in the canonical ~/.hermes checkout; this test file
+    # is kept in the hermes-agent checkout for regression coverage.
+    repo_root = Path(__file__).resolve().parents[3]
+    app_path = repo_root / "dashboard" / "app.py"
 
     module_names = [
         "sales_signal",

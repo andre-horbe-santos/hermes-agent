@@ -140,6 +140,13 @@ class FakeFlowKGCDB:
     def jump_to_step_scheduled(self, entry_id: str, step_idx: int, _delay_sec: int) -> dict:
         return self.jump_to_step(entry_id, step_idx)
 
+    def set_waiting(self, entry_id: str, wait_type: str, _timeout_days: int, **_kwargs) -> dict:
+        entry = self._entry(entry_id)
+        entry["step_status"] = wait_type
+        entry["pending_draft"] = None
+        entry["reply_received"] = None
+        return self.get_entry(entry_id)
+
     def set_pending_approval(self, entry_id: str, draft: str, stage: int, reply_text: str, reply_channel: str = "linkedin") -> dict:
         entry = self._entry(entry_id)
         msgs = list(entry.get("messages_sent") or [])
@@ -206,7 +213,7 @@ class FakeFlowKGCDB:
     def get_paused_operator_ids(self) -> list[str]:
         return []
 
-    def set_invite_pending(self, entry_id: str, note: str) -> dict:
+    def set_invite_pending(self, entry_id: str, note: str, draft_variants=None) -> dict:
         entry = self._entry(entry_id)
         msgs = list(entry.get("messages_sent") or [])
         msgs = [m for m in msgs if not (isinstance(m, dict) and m.get("_type") in {"pending_channel", "pending_invite"})]
@@ -215,6 +222,7 @@ class FakeFlowKGCDB:
             "step_status": "waiting_approval",
             "pending_draft": note,
             "pending_draft_at": "now",
+            "draft_variants": copy.deepcopy(draft_variants or []),
             "messages_sent": msgs,
         })
         return self.get_entry(entry_id)
@@ -286,7 +294,7 @@ def test_jefferson_followup_loop_advances_and_resets_to_wait_reply(monkeypatch):
     monkeypatch.setattr(runner, "_notify_pending_approval", lambda *args, **kwargs: None)
     monkeypatch.setattr(runner, "_fetch_lead_signals", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(runner, "_refresh_entry_from_signals", lambda entry, _signals: entry)
-    monkeypatch.setattr(runner, "_business_hours", lambda _kind: True)
+    monkeypatch.setattr(runner, "_business_hours", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(runner, "_next_business_slot", lambda _kind: 0)
     monkeypatch.setattr(
         runner,
@@ -344,7 +352,7 @@ def test_jefferson_reaction_only_skips_to_followup_loop(monkeypatch):
     monkeypatch.setattr(runner, "_notify_pending_approval", lambda *args, **kwargs: None)
     monkeypatch.setattr(runner, "_fetch_lead_signals", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(runner, "_refresh_entry_from_signals", lambda entry, _signals: entry)
-    monkeypatch.setattr(runner, "_business_hours", lambda _kind: True)
+    monkeypatch.setattr(runner, "_business_hours", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(runner, "_next_business_slot", lambda _kind: 0)
     monkeypatch.setattr(
         runner,
@@ -397,11 +405,12 @@ def test_ln_message_without_chat_keeps_manual_approval_instead_of_failing(monkey
     monkeypatch.setattr(runner, "db", fake_db)
     monkeypatch.setattr(runner, "_audit", lambda *args, **kwargs: None)
     monkeypatch.setattr(runner, "_notify_pending_approval", lambda *args, **kwargs: None)
-    monkeypatch.setattr(runner, "_business_hours", lambda _kind: True)
+    monkeypatch.setattr(runner, "_business_hours", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(runner, "_fetch_lead_signals", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(runner, "_refresh_entry_from_signals", lambda entry, _signals: entry)
     monkeypatch.setattr(runner, "_fetch_sector_insight", lambda _entry: None)
     monkeypatch.setattr(runner, "_get_or_create_ln_chat", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(runner, "check_accepted", lambda _entry: False)
     monkeypatch.setattr(
         runner,
         "_haiku",
@@ -409,12 +418,13 @@ def test_ln_message_without_chat_keeps_manual_approval_instead_of_failing(monkey
     )
 
     runner.advance(fake_db.get_entry("kgc_i_ln-entry"))
+    runner.advance(fake_db.get_entry("kgc_i_ln-entry"))
 
     updated = fake_db.get_entry("kgc_i_ln-entry")
     assert updated["status"] == "active"
-    assert updated["step_status"] == "waiting_approval"
-    assert updated["current_step"] == 11
-    assert updated["pending_draft"] == "DM aprovada para Maxwell"
+    assert updated["step_status"] == "waiting_accept"
+    assert updated["current_step"] == 10
+    assert updated["pending_draft"] is None
     assert updated.get("error_message") is None
 
 
