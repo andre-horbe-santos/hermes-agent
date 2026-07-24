@@ -1287,6 +1287,68 @@ def profile_env(tmp_path, monkeypatch):
 
 ---
 
+## Apollo enrichment integration
+
+The dashboard uses Apollo in four distinct enrichment paths. Keep these paths
+separate when changing or debugging enrichment behavior; Apollo data is not a
+replacement for LinkedIn/Unipile signals.
+
+### Kit.com / LeadMagnet subscribers
+
+`scripts/kit_lead_enrichment.py` runs every two hours through the
+`kit-lead-enrichment` cron and calls `POST /api/v1/people/match` by subscriber
+e-mail. It stores the resolved Apollo fields in `kit_leads`:
+
+- Apollo person id, name, first/last name and resolved corporate e-mail;
+- job title, seniority and departments;
+- company name, domain and LinkedIn URL;
+- personal e-mails returned by Apollo;
+- phone when Apollo returns one, plus enrichment timestamp.
+
+The normal Kit path uses `reveal_personal_emails: false` and does not request
+phone reveal, to avoid direct-dial credit consumption. It then performs the
+HubSpot lookup, ICP scoring, connection checks and optional Flow KGC queueing.
+
+### Sales Signal lead enrichment
+
+`scripts/sales_signal/batch_enrich.py` and the dashboard enrichment endpoints
+use `people/match` with the LinkedIn URL when a lead lacks company data. The
+Apollo organization is used to populate `ssk_companies` with industry,
+estimated employee count, description, specialties, domain and LinkedIn
+metadata. The person profile itself remains primarily sourced from
+LinkedIn/Unipile.
+
+### Apollo list prospecting
+
+`scripts/apollo_list_prospecting.py` runs every 30 minutes through
+`run_apollo_list_prospecting.sh` and reads the monitored Apollo lists. It
+deduplicates contacts and skips contacts already staged or active, then uses:
+
+- `POST /v1/organizations/bulk_enrich` for company industry, size,
+  description and keywords;
+- `POST /v1/people/bulk_match` only in the programmatic ICP-search path.
+
+These bulk enrichment calls consume Apollo credits and must remain behind the
+explicit `--confirm-spend` flag. Results are classified by ICP and written to
+`flow_kgc_apollo_staging`; promotion to an outreach flow is a human decision.
+
+### Manual Flow KGC enrichment
+
+`GET /api/flow-kgc/enrich-contact/<lead_id>` is the manual fallback. It first
+tries the database and Unipile, then calls Apollo `people/match` with LinkedIn
+and name. It may request personal e-mail and phone reveal, create a contact
+through `POST /api/v1/contacts` when no e-mail is found, and register the
+phone-reveal webhook at `/api/apollo/phone-reveal-webhook`.
+
+### Operational snapshot
+
+As of 2026-07-24, the Supabase `kit_leads` table contained 111 records: 108
+with an Apollo person id, 77 with a resolved name, 45 with company name, 34
+with title, 26 with LinkedIn URL, and none with Apollo phone. The Apollo
+staging table contained 512 records: 350 pending, 113 promoted and 49
+discarded. These numbers are an operational snapshot, not a contract for
+tests or code behavior.
+
 ## Testing
 
 **ALWAYS use `scripts/run_tests.sh`** — do not call `pytest` directly. The script enforces
