@@ -44,3 +44,21 @@ Supabase.
 - A amostra Apify foi persistida no Lead Monitor.
 - Não ativar novos jobs de backfill até a frente de egress definir o cache e o
   limite de consultas.
+
+## Decisão — 2026-07-25: migração completa (não só cache)
+
+André autorizou ir além do cache/mirror parcial descrito acima: sair do
+Supabase gerenciado e rodar Postgres self-hosted na própria VPS
+(PostgreSQL nativo via apt + PostgREST self-hosted na frente, mantendo os
+~15 módulos `db.py` sem alteração de código), incluindo uma rotina de
+backup/DR que hoje não existe.
+
+- Plano aprovado: `~/.claude/plans/ticklish-shimmying-corbato.md`
+- Runbook de execução (comandos exatos, Fases 1-4):
+  `~/.hermes/operations/postgres-selfhost-migration-runbook.md`
+- Scripts prontos: `scripts/postgrest_jwt_gen.py`, `scripts/pg_backup.sh`
+
+**Bloqueio atual:** instalação (apt, swap, systemd units) exige sudo fora
+do allowlist sem senha configurado na VPS — precisa ser rodada manualmente
+por alguém com a senha antes de a Fase 1 do runbook avançar. Nada foi
+instalado/alterado no sistema ainda.
