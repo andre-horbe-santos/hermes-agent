@@ -13,8 +13,10 @@ Use the existing Sales Monitor persistence path (`ssk_page_engagements`,
 
 ## Initial scope
 
-Backfill active posts published in the last 7–30 days, using short profile
-output only. Enrich only authors that pass the ICP/lead qualification step.
+Backfill active posts published in the last 7–30 days. Use short profile
+output for comments and main profile resolution for reactions, because the
+reaction Actor can otherwise return obfuscated `ACo...` identifiers. Enrich
+only authors that pass the ICP/lead qualification step.
 Do not invoke an LLM per raw reaction or comment.
 
 Current database snapshot used for the estimate:
@@ -32,13 +34,14 @@ capture cost is:
 
 | Window | Results to capture | Base Apify cost | With 20% retry margin |
 |---|---:|---:|---:|
-| 7 days | 2,200 | US$4.40 | US$5.28 |
-| 30 days | 17,058 | US$34.12 | US$40.94 |
+| 7 days | 2,200 | US$8.39 | US$10.07 |
+| 30 days | 17,058 | US$66.07 | US$79.28 |
 
-These figures exclude optional full-profile enrichment. The short mode should
-return name, profile URL, position and reaction/comment metadata. Full profile
-enrichment can multiply the per-result price and should be applied only after
-ICP qualification.
+These figures include the current main-profile resolution surcharge for
+reactions (US$0.002 per reaction) and exclude optional full-profile
+enrichment. Main/short output returns name, profile URL, position and
+reaction/comment metadata. Full profile enrichment can multiply the per-result
+price and should be applied only after ICP qualification.
 
 Shares are currently treated as a counter from Unipile, so they add no Apify
 backfill cost. Repost Actors are not reliable enough for this workflow. If a
@@ -58,8 +61,8 @@ worker/cron with:
 - a final synchronization pass into `ssk_leads` and `ssk_engagements`.
 
 The 7-day run is the recommended first pilot: 25 posts, approximately 2,200
-results and a budget of US$6 including retries. Expand to 30 days only after
-checking deduplication and ICP enrichment behavior; budget approximately US$45
+results and a budget of US$12 including retries. Expand to 30 days only after
+checking deduplication and ICP enrichment behavior; budget approximately US$85
 including retries and operational headroom.
 
 ## Recurring policy
