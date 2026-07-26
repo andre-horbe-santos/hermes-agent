@@ -181,6 +181,63 @@ class TestRunJobScript:
         assert success is False
         assert "timed out" in output.lower()
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="process-group kill uses os.killpg, POSIX-only path",
+    )
+    def test_script_timeout_kills_foreground_grandchild(self, cron_env, monkeypatch):
+        """Regression test — 2026-07-26 production incident.
+
+        A .sh wrapper that runs the real work as a *foreground* child
+        (`python3 real_work.py`, no `&`) must have that child killed too
+        when the wrapper's own timeout fires. Before the fix,
+        subprocess.run(timeout=...) only killed the direct child (bash);
+        the foreground grandchild survived, got reparented to init/systemd,
+        and kept running for hours with zero supervision — it was still
+        making real API calls and writing to the database well after the
+        scheduler had already recorded the job as "timed out".
+        """
+        import time
+
+        from cron import scheduler as sched_mod
+        from cron.scheduler import _run_job_script
+
+        monkeypatch.setattr(sched_mod, "_SCRIPT_TIMEOUT", 1)
+
+        # The grandchild writes its PID to a file every 0.1s for 10s. If it's
+        # still alive (and still appending) after the wrapper is killed,
+        # the file keeps growing after _run_job_script() returns.
+        marker = cron_env / "scripts" / "grandchild_alive.marker"
+        grandchild = cron_env / "scripts" / "grandchild.py"
+        grandchild.write_text(textwrap.dedent(f"""\
+            import time
+            for _ in range(100):
+                with open({str(marker)!r}, "a") as f:
+                    f.write("x")
+                time.sleep(0.1)
+        """))
+
+        wrapper = cron_env / "scripts" / "wrapper.sh"
+        wrapper.write_text(textwrap.dedent(f"""\
+            #!/usr/bin/env bash
+            # Foreground call, exactly like the real ssk_*.sh wrappers in
+            # production — no trailing `&`, the shell just wait()s on it.
+            python3 {str(grandchild)!r}
+        """))
+
+        success, output = _run_job_script(str(wrapper))
+        assert success is False
+        assert "timed out" in output.lower()
+
+        size_at_return = marker.stat().st_size if marker.exists() else 0
+        time.sleep(1.0)  # give a still-alive grandchild time to write more
+        size_after_wait = marker.stat().st_size if marker.exists() else 0
+
+        assert size_after_wait == size_at_return, (
+            "grandchild kept writing after _run_job_script() returned — "
+            "it survived the timeout kill (orphaned, unsupervised)"
+        )
+
     def test_script_json_output(self, cron_env):
         """Scripts can output structured JSON for the LLM to parse."""
         from cron.scheduler import _run_job_script

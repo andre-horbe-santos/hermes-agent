@@ -1627,21 +1627,48 @@ def _run_job_script(script_path: str) -> tuple[bool, str]:
     else:
         argv = [sys.executable, str(path)]
 
+    process = None
     try:
         from tools.environments.local import _sanitize_subprocess_env
 
         popen_kwargs = {"creationflags": windows_hide_flags()} if sys.platform == "win32" else {}
-        result = subprocess.run(
+        # Put the child in its own session/process group so a timeout can
+        # kill the whole tree, not just the immediate process. This matters
+        # for .sh wrappers: the direct child is `bash script.sh`, and the
+        # real work (e.g. `python3 -m some.module`) runs as ITS foreground
+        # child. subprocess.run()'s default timeout handling only signals
+        # the direct child (bash) — killing bash does not propagate to a
+        # process it was merely wait()ing on, so the real work gets
+        # reparented to init/systemd and keeps running with no supervision
+        # at all. Found 2026-07-26: a Sales Signal cron job kept hitting
+        # external APIs and writing to the database for hours after the
+        # scheduler had already recorded it as "timed out".
+        if sys.platform != "win32":
+            popen_kwargs["start_new_session"] = True
+
+        process = subprocess.Popen(
             argv,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=script_timeout,
             cwd=str(path.parent),
             env=_sanitize_subprocess_env(os.environ.copy()),
             **popen_kwargs,
         )
-        stdout = (result.stdout or "").strip()
-        stderr = (result.stderr or "").strip()
+        try:
+            stdout, stderr = process.communicate(timeout=script_timeout)
+        except subprocess.TimeoutExpired:
+            _kill_process_tree(process)
+            # Drain pipes so the killed process doesn't leave zombies; any
+            # late output at this point is irrelevant, the job already failed.
+            try:
+                process.communicate(timeout=5)
+            except Exception:
+                pass
+            return False, f"Script timed out after {script_timeout}s: {path}"
+
+        stdout = (stdout or "").strip()
+        stderr = (stderr or "").strip()
 
         # Redact secrets from both stdout and stderr before any return path.
         try:
@@ -1651,8 +1678,8 @@ def _run_job_script(script_path: str) -> tuple[bool, str]:
         except Exception:
             pass
 
-        if result.returncode != 0:
-            parts = [f"Script exited with code {result.returncode}"]
+        if process.returncode != 0:
+            parts = [f"Script exited with code {process.returncode}"]
             if stderr:
                 parts.append(f"stderr:\n{stderr}")
             if stdout:
@@ -1661,10 +1688,37 @@ def _run_job_script(script_path: str) -> tuple[bool, str]:
 
         return True, stdout
 
-    except subprocess.TimeoutExpired:
-        return False, f"Script timed out after {script_timeout}s: {path}"
     except Exception as exc:
+        if process is not None:
+            _kill_process_tree(process)
         return False, f"Script execution failed: {exc}"
+
+
+def _kill_process_tree(process: "subprocess.Popen") -> None:
+    """Kill a subprocess and all of its descendants (best-effort).
+
+    ``Popen.kill()`` only signals the direct child. When that child is a
+    shell wrapper running the real work in the foreground, that leaves the
+    real work orphaned and unsupervised instead of terminated — see the
+    timeout-handling comment in ``_run_job_script`` for the incident that
+    surfaced this.
+    """
+    try:
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                capture_output=True, timeout=10,
+            )
+        else:
+            import signal
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        pass
+    finally:
+        try:
+            process.kill()
+        except Exception:
+            pass
 
 
 def _parse_wake_gate(script_output: str) -> bool:
