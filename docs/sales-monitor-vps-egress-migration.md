@@ -38,14 +38,15 @@ concentrar, agregar e cachear as leituras. Migração do banco ou réplica local
 é a etapa necessária para retirar a maior parte do tráfego do caminho do
 Supabase.
 
-## Estado atual
+## Estado atual (histórico — ver atualização de 2026-07-25 abaixo)
 
 - O recálculo integral de Eng./Int. foi interrompido a pedido do usuário.
 - A amostra Apify foi persistida no Lead Monitor.
-- Não ativar novos jobs de backfill até a frente de egress definir o cache e o
-  limite de consultas.
+- ~~Não ativar novos jobs de backfill até a frente de egress definir o
+  cache e o limite de consultas.~~ Superado — ver abaixo, migração
+  completa concluída no mesmo dia.
 
-## Decisão — 2026-07-25: migração completa (não só cache)
+## Decisão — 2026-07-25: migração completa (não só cache) — CONCLUÍDA
 
 André autorizou ir além do cache/mirror parcial descrito acima: sair do
 Supabase gerenciado e rodar Postgres self-hosted na própria VPS
@@ -56,9 +57,22 @@ backup/DR que hoje não existe.
 - Plano aprovado: `~/.claude/plans/ticklish-shimmying-corbato.md`
 - Runbook de execução (comandos exatos, Fases 1-4):
   `~/.hermes/operations/postgres-selfhost-migration-runbook.md`
+- Registro do cutover: `~/.hermes/operations/postgres-selfhost-cutover-2026-07-25.md`
 - Scripts prontos: `scripts/postgrest_jwt_gen.py`, `scripts/pg_backup.sh`
 
-**Bloqueio atual:** instalação (apt, swap, systemd units) exige sudo fora
-do allowlist sem senha configurado na VPS — precisa ser rodada manualmente
-por alguém com a senha antes de a Fase 1 do runbook avançar. Nada foi
-instalado/alterado no sistema ainda.
+**Concluído no mesmo dia (2026-07-25), mesma sessão:** o bloqueio de sudo
+foi resolvido (allowlist escopada, 4 scripts idempotentes) e as Fases 1-4
+rodaram de ponta a ponta — Postgres 17 + PostgREST self-hosted instalados,
+dados migrados (194MB, contagem idêntica à origem), cutover de produção
+feito (14 crons + `flow-kgc-daemon` apontando pro banco novo). **A partir
+daqui, `SUPABASE_FUNIL_URL` aponta pro self-hosted (`127.0.0.1:3101`) — o
+Supabase gerenciado não é mais tocado por tráfego de aplicação nenhum**,
+só existe como rollback (`SUPABASE_MANAGED_FUNIL_*` no `.env`). Ou seja: a
+premissa "reduzir egress do Supabase" está resolvida da forma mais forte
+possível (zero egress de aplicação), não só mitigada — qualquer job novo
+(backfill Apify incluso) escreve no banco self-hosted, sem custo de egress
+Supabase.
+
+Pendências conscientes (não bloqueiam o item acima): backup/DR ainda não
+registrado em cron, `local_mirror.py` ainda ativo (redundante), Cloudflare
+Worker não migrado, secrets novos ainda só no `.env` (não Bitwarden).
