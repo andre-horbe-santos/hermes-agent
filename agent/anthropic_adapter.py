@@ -1087,6 +1087,14 @@ def _refresh_oauth_token(creds: Dict[str, Any]) -> Optional[str]:
     has already produced a valid token, adopt it and skip the POST entirely.
     Only fall back to refreshing ourselves when no fresh credential is found.
     """
+    # A credential record without a refresh token is not refreshable.  Do
+    # this check before re-reading the live credential file: otherwise a
+    # caller holding a non-refreshable record could unexpectedly adopt a
+    # refresh token from an unrelated/current on-disk record.
+    if not creds.get("refreshToken"):
+        logger.debug("No refresh token available — cannot refresh")
+        return None
+
     # Claude Code may have already refreshed — adopt its token rather than
     # racing it with our (possibly already-rotated) refresh token. Only adopt
     # when the live re-read produced a DIFFERENT token with a real future
@@ -1107,10 +1115,7 @@ def _refresh_oauth_token(creds: Dict[str, Any]) -> Optional[str]:
             logger.debug("Adopted Claude Code's already-refreshed OAuth token")
             return current_token
 
-    refresh_token = (current or {}).get("refreshToken", "") or creds.get("refreshToken", "")
-    if not refresh_token:
-        logger.debug("No refresh token available — cannot refresh")
-        return None
+    refresh_token = (current or {}).get("refreshToken", "") or creds["refreshToken"]
 
     try:
         refreshed = refresh_anthropic_oauth_pure(refresh_token, use_json=False)

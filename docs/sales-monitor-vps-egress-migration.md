@@ -65,7 +65,7 @@ foi resolvido (allowlist escopada, 4 scripts idempotentes) e as Fases 1-4
 rodaram de ponta a ponta — Postgres 17 + PostgREST self-hosted instalados,
 dados migrados (194MB, contagem idêntica à origem), cutover de produção
 feito (14 crons + `flow-kgc-daemon` apontando pro banco novo). **A partir
-daqui, `SUPABASE_FUNIL_URL` aponta pro self-hosted (`127.0.0.1:3101`) — o
+daqui, `VPS_FUNIL_URL` aponta pro self-hosted (`127.0.0.1:3101`) — o
 Supabase gerenciado não é mais tocado por tráfego de aplicação nenhum**,
 só existe como rollback (`SUPABASE_MANAGED_FUNIL_*` no `.env`). Ou seja: a
 premissa "reduzir egress do Supabase" está resolvida da forma mais forte
