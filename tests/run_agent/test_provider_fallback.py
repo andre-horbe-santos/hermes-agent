@@ -182,6 +182,25 @@ class TestFallbackChainAdvancement:
             assert agent._try_activate_fallback() is True
             assert mock_rpc.call_args.kwargs["explicit_api_key"] == "env-secret"
 
+    def test_skips_backends_still_in_cooldown(self):
+        fbs = [
+            {"provider": "openrouter", "model": "anthropic/claude-sonnet-4"},
+            {"provider": "openai", "model": "gpt-4o"},
+        ]
+        agent = _make_agent(fallback_model=fbs)
+        agent._backend_cooldowns = {
+            ("openrouter", "anthropic/claude-sonnet-4", ""): float("inf"),
+        }
+        with patch(
+            "agent.auxiliary_client.resolve_provider_client",
+            return_value=(_mock_client(), "gpt-4o"),
+        ):
+            assert agent._try_activate_fallback() is True
+
+        assert agent.provider == "openai"
+        assert agent.model == "gpt-4o"
+        assert agent._fallback_index == 2
+
 
 # ── Pool-rotation vs fallback gating (#11314) ────────────────────────────
 

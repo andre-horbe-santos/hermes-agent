@@ -4109,6 +4109,37 @@ class TestRunConversation:
         assert result["final_response"] != "(empty)"
         assert "No reply:" in result["final_response"]
 
+    def test_empty_response_skips_fallback_when_no_viable_target_remains(self, agent):
+        """If every fallback target is cooling down, the empty-response path
+        should not waste a fallback attempt."""
+        self._setup_agent(agent)
+        agent.base_url = "http://127.0.0.1:1234/v1"
+        agent._fallback_chain = [
+            {"provider": "openrouter", "model": "anthropic/claude-sonnet-4"}
+        ]
+        agent._fallback_index = 0
+        agent._fallback_activated = False
+        agent._backend_cooldowns = {
+            ("openrouter", "anthropic/claude-sonnet-4", ""): float("inf"),
+        }
+
+        empty_resp = _mock_response(content=None, finish_reason="stop")
+        agent.client.chat.completions.create.side_effect = [
+            empty_resp, empty_resp, empty_resp, empty_resp,
+        ]
+
+        with (
+            patch.object(agent, "_persist_session"),
+            patch.object(agent, "_save_trajectory"),
+            patch.object(agent, "_cleanup_task_resources"),
+            patch.object(agent, "_try_activate_fallback", side_effect=AssertionError("fallback should not be attempted")),
+        ):
+            result = agent.run_conversation("answer me")
+
+        assert result["completed"] is True
+        assert result["final_response"] != "(empty)"
+        assert "No reply:" in result["final_response"]
+
     def test_empty_response_emits_status_for_gateway(self, agent):
         """_emit_status is called during empty retries so gateway users see feedback."""
         self._setup_agent(agent)

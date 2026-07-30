@@ -86,7 +86,9 @@ def _should_run_preflight_estimate(
     """
     if len(messages) > protect_first_n + protect_last_n + 1:
         return True
-    return estimate_messages_tokens_rough(messages) >= threshold_tokens
+    rough_tokens = estimate_messages_tokens_rough(messages)
+    safety_margin = max(4096, int(threshold_tokens * 0.10))
+    return rough_tokens >= max(1, threshold_tokens - safety_margin)
 
 
 @dataclass

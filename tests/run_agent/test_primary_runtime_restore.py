@@ -211,6 +211,24 @@ class TestRestorePrimaryRuntime:
 
         assert result is False
 
+    def test_restore_respects_primary_backend_cooldown(self):
+        """If the primary backend itself is cooling down, stay on fallback."""
+        agent = _make_agent(
+            fallback_model={"provider": "openrouter", "model": "anthropic/claude-sonnet-4"},
+        )
+        with patch("agent.auxiliary_client.resolve_provider_client", return_value=(_mock_resolve(), None)):
+            agent._try_activate_fallback()
+
+        agent._backend_cooldowns = {
+            (agent._primary_runtime["provider"], agent._primary_runtime["model"], agent._primary_runtime["base_url"]): float("inf"),
+        }
+        with patch("run_agent.OpenAI", return_value=MagicMock()):
+            result = agent._restore_primary_runtime()
+
+        assert result is False
+        assert agent._fallback_activated is True
+        assert agent.provider == "openrouter"
+
 
 # =============================================================================
 # _try_recover_primary_transport()

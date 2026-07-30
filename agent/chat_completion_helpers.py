@@ -50,6 +50,83 @@ _OPENROUTER_PROVIDER_SORT_VALUES = {"throughput", "latency", "price"}
 # billing reasons keep their own 60s cooldown (set above); this is the
 # narrower non-rate-limit case.  See issue #24996.
 _FALLBACK_EXHAUSTED_COOLDOWN_S = 5.0
+_BACKEND_RATE_LIMIT_COOLDOWN_S = 60.0
+
+
+def _backend_cooldown_key(provider: str, model: str, base_url: str = "") -> tuple[str, str, str]:
+    return (
+        (provider or "").strip().lower(),
+        (model or "").strip(),
+        str(base_url or "").strip().rstrip("/").lower(),
+    )
+
+
+def _backend_cooldowns(agent) -> dict[tuple[str, str, str], float]:
+    cooldowns = getattr(agent, "_backend_cooldowns", None)
+    if cooldowns is None:
+        cooldowns = {}
+        agent._backend_cooldowns = cooldowns
+    return cooldowns
+
+
+def _arm_backend_cooldown(
+    agent,
+    provider: str,
+    model: str,
+    base_url: str = "",
+    *,
+    duration_s: float,
+) -> float:
+    until = time.monotonic() + max(0.0, float(duration_s))
+    key = _backend_cooldown_key(provider, model, base_url)
+    cooldowns = _backend_cooldowns(agent)
+    cooldowns[key] = max(cooldowns.get(key, 0.0), until)
+    return cooldowns[key]
+
+
+def _backend_is_cooling_down(
+    agent,
+    provider: str,
+    model: str,
+    base_url: str = "",
+    *,
+    now: float | None = None,
+) -> bool:
+    key = _backend_cooldown_key(provider, model, base_url)
+    cooldowns = getattr(agent, "_backend_cooldowns", None) or {}
+    until = cooldowns.get(key, 0.0) or 0.0
+    return until > (time.monotonic() if now is None else now)
+
+
+def _has_viable_fallback_target(agent) -> bool:
+    chain = list(getattr(agent, "_fallback_chain", None) or [])
+    if not chain:
+        return False
+    current_provider = (getattr(agent, "provider", "") or "").strip().lower()
+    current_model = (getattr(agent, "model", "") or "").strip()
+    current_base_url = str(getattr(agent, "base_url", "") or "").strip().rstrip("/").lower()
+    fallback_index = max(0, int(getattr(agent, "_fallback_index", 0) or 0))
+    for fb in chain[fallback_index:]:
+        if not isinstance(fb, dict):
+            continue
+        fb_provider = (fb.get("provider") or "").strip().lower()
+        fb_model = (fb.get("model") or "").strip()
+        if not fb_provider or not fb_model:
+            continue
+        fb_base_url = (fb.get("base_url") or "").strip().rstrip("/").lower()
+        if fb_provider == current_provider and fb_model == current_model:
+            continue
+        if (
+            fb_base_url
+            and current_base_url
+            and fb_base_url == current_base_url
+            and fb_model == current_model
+        ):
+            continue
+        if _backend_is_cooling_down(agent, fb_provider, fb_model, fb_base_url):
+            continue
+        return True
+    return False
 
 
 def _ra():
@@ -1131,8 +1208,17 @@ def try_activate_fallback(agent, reason: "FailoverReason | None" = None) -> bool
         fallback_already_active = bool(getattr(agent, "_fallback_activated", False))
         current_provider = (getattr(agent, "provider", "") or "").strip().lower()
         primary_provider = ((agent._primary_runtime or {}).get("provider") or "").strip().lower()
+        current_model = (getattr(agent, "model", "") or "").strip()
+        current_base_url = str(getattr(agent, "base_url", "") or "").strip()
         if (not fallback_already_active) or (primary_provider and current_provider == primary_provider):
-            agent._rate_limited_until = time.monotonic() + 60
+            agent._rate_limited_until = time.monotonic() + _BACKEND_RATE_LIMIT_COOLDOWN_S
+        _arm_backend_cooldown(
+            agent,
+            current_provider,
+            current_model,
+            current_base_url,
+            duration_s=_BACKEND_RATE_LIMIT_COOLDOWN_S,
+        )
     if agent._fallback_index >= len(agent._fallback_chain):
         # Chain exhausted.  If we actually walked a non-empty chain and the
         # failure was NOT a rate-limit/billing event (those already armed
@@ -1145,9 +1231,14 @@ def try_activate_fallback(agent, reason: "FailoverReason | None" = None) -> bool
             and reason not in {FailoverReason.rate_limit, FailoverReason.billing}
         ):
             _existing_cooldown = getattr(agent, "_rate_limited_until", 0) or 0
-            agent._rate_limited_until = max(
-                _existing_cooldown,
-                time.monotonic() + _FALLBACK_EXHAUSTED_COOLDOWN_S,
+            cooldown_until = time.monotonic() + _FALLBACK_EXHAUSTED_COOLDOWN_S
+            agent._rate_limited_until = max(_existing_cooldown, cooldown_until)
+            _arm_backend_cooldown(
+                agent,
+                (getattr(agent, "provider", "") or ""),
+                (getattr(agent, "model", "") or ""),
+                (getattr(agent, "base_url", "") or ""),
+                duration_s=_FALLBACK_EXHAUSTED_COOLDOWN_S,
             )
         return False
     fb = agent._fallback_chain[agent._fallback_index]
@@ -1180,6 +1271,12 @@ def try_activate_fallback(agent, reason: "FailoverReason | None" = None) -> bool
         logger.warning(
             "Fallback skip: chain entry base_url %s matches current backend",
             fb_base_url_for_dedup,
+        )
+        return agent._try_activate_fallback()
+    if _backend_is_cooling_down(agent, fb_provider, fb_model, fb_base_url_for_dedup):
+        logger.warning(
+            "Fallback skip: chain entry %s/%s is still cooling down",
+            fb_provider, fb_model,
         )
         return agent._try_activate_fallback()
 

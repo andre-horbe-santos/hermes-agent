@@ -1027,10 +1027,20 @@ def restore_primary_runtime(agent) -> bool:
         agent._fallback_index = 0
         return False
 
+    rt = agent._primary_runtime
     if getattr(agent, "_rate_limited_until", 0) > time.monotonic():
         return False  # primary still in rate-limit cooldown, stay on fallback
-
-    rt = agent._primary_runtime
+    try:
+        from agent.chat_completion_helpers import _backend_is_cooling_down
+        if _backend_is_cooling_down(
+            agent,
+            (rt.get("provider") or ""),
+            (rt.get("model") or ""),
+            (rt.get("base_url") or ""),
+        ):
+            return False
+    except Exception:
+        pass
     try:
         # ── Core runtime state ──
         agent.model = rt["model"]

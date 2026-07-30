@@ -4630,30 +4630,40 @@ def run_conversation(
                     # (e.g. GLM-4.5-Air) consistently returns empty
                     # due to context degradation or provider issues.
                     if _truly_empty and agent._fallback_chain:
-                        logger.warning(
-                            "Empty response after %d retries — "
-                            "attempting fallback (model=%s, provider=%s)",
-                            agent._empty_content_retries, agent.model,
-                            agent.provider,
-                        )
-                        agent._buffer_status(
-                            "⚠️ Model returning empty responses — "
-                            "switching to fallback provider..."
-                        )
-                        if agent._try_activate_fallback():
-                            active_system_prompt = _sync_failover_system_message(
-                                agent, api_messages, active_system_prompt)
-                            agent._empty_content_retries = 0
+                        from agent.chat_completion_helpers import _has_viable_fallback_target
+                        if _has_viable_fallback_target(agent):
+                            logger.warning(
+                                "Empty response after %d retries — "
+                                "attempting fallback (model=%s, provider=%s)",
+                                agent._empty_content_retries, agent.model,
+                                agent.provider,
+                            )
                             agent._buffer_status(
-                                f"↻ Switched to fallback: {agent.model} "
-                                f"({agent.provider})"
+                                "⚠️ Model returning empty responses — "
+                                "switching to fallback provider..."
                             )
-                            logger.info(
-                                "Fallback activated after empty responses: "
-                                "now using %s on %s",
-                                agent.model, agent.provider,
+                            if agent._try_activate_fallback():
+                                active_system_prompt = _sync_failover_system_message(
+                                    agent, api_messages, active_system_prompt)
+                                agent._empty_content_retries = 0
+                                agent._buffer_status(
+                                    f"↻ Switched to fallback: {agent.model} "
+                                    f"({agent.provider})"
+                                )
+                                logger.info(
+                                    "Fallback activated after empty responses: "
+                                    "now using %s on %s",
+                                    agent.model, agent.provider,
+                                )
+                                continue
+                        else:
+                            logger.warning(
+                                "Empty response after %d retries — "
+                                "no viable fallback target remains "
+                                "(model=%s, provider=%s)",
+                                agent._empty_content_retries, agent.model,
+                                agent.provider,
                             )
-                            continue
 
                     # Exhausted retries and fallback chain (or no
                     # fallback configured).  Fall through to the
