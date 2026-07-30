@@ -16,8 +16,8 @@ def _load_flow_kgc_modules(monkeypatch):
     koncepto_root = Path(__file__).resolve().parents[3]
     flow_root = koncepto_root / "scripts" / "flow_kgc"
 
-    monkeypatch.setenv("SUPABASE_FUNIL_URL", "http://supabase.test")
-    monkeypatch.setenv("SUPABASE_FUNIL_SERVICE_ROLE_KEY", "test-service-role")
+    monkeypatch.setenv("VPS_FUNIL_URL", "http://supabase.test")
+    monkeypatch.setenv("VPS_FUNIL_SERVICE_ROLE_KEY", "test-service-role")
     monkeypatch.setenv("UNIPILE_DSN", "http://unipile.test")
     monkeypatch.setenv("UNIPILE_API_KEY", "test-unipile-key")
 
@@ -426,6 +426,116 @@ def test_ln_message_without_chat_keeps_manual_approval_instead_of_failing(monkey
     assert updated["current_step"] == 10
     assert updated["pending_draft"] is None
     assert updated.get("error_message") is None
+
+
+@pytest.mark.parametrize(
+    ("flow_id", "wait_step", "message_step"),
+    [
+        ("kgc_i_ln", 10, 11),
+        ("kgc_ii_ln", 9, 10),
+    ],
+)
+def test_linkedin_acceptance_opens_chat_and_routes_to_post_connection_dm(
+    monkeypatch, flow_id, wait_step, message_step
+):
+    """An accepted invite must enter the DM branch with the chat persisted."""
+    runner, _db_module, flow_steps = _load_flow_kgc_modules(monkeypatch)
+    entry = _make_entry(flow_id)
+    entry.update({
+        "current_step": wait_step,
+        "flow_id": flow_id,
+        "status": "active",
+        "step_status": "waiting_accept",
+        "sandbox": False,
+        "messages_sent": [
+            {
+                "_type": "ln_invite_sent",
+                "channel": "ln_invite",
+                "text": "Convite aprovado",
+                "sent_at": "2026-07-09T10:00:00Z",
+            },
+            {
+                "_type": "wait_meta",
+                "wait_type": "waiting_accept",
+                "timeout_at": "2026-07-23T10:00:00Z",
+                "started_at": "2026-07-09T10:00:00Z",
+            },
+        ],
+    })
+    fake_db = FakeFlowKGCDB(entry)
+    audits = []
+
+    monkeypatch.setattr(runner, "db", fake_db)
+    monkeypatch.setattr(runner, "check_accepted", lambda _entry: True)
+    monkeypatch.setattr(runner, "_get_or_create_ln_chat", lambda *_args, **_kwargs: "chat-accepted")
+    monkeypatch.setattr(runner, "_audit", lambda _entry, action, details: audits.append((action, details)))
+
+    runner.advance(fake_db.get_entry(entry["id"]))
+
+    updated = fake_db.get_entry(entry["id"])
+    assert updated["ln_chat_id"] == "chat-accepted"
+    assert updated["current_step"] == message_step
+    assert updated["step_status"] == "pending"
+    assert ("invite_accepted", {"linkedin_id": "lead-linkedin-id"}) in audits
+    assert flow_steps.FLOWS[flow_id]["steps"][wait_step]["branch_accept"] == message_step
+
+
+def test_caio_borba_reply_generates_contextual_followup_draft(monkeypatch):
+    """Caio's real conversation shape must not regenerate the connection opener."""
+    runner, _db_module, _flow_steps = _load_flow_kgc_modules(monkeypatch)
+    entry = _make_entry("kgc_ii_ln_v3")
+    entry.update({
+        "full_name": "Caio Borba",
+        "company_name": "Pier Sul Consultoria e Corretora de Seguros",
+        "linkedin_id": "caio-borba-2089b734b",
+        "flow_id": "kgc_ii_ln_v3",
+        "current_step": 14,
+        "status": "active",
+        "step_status": "pending",
+        "sandbox": False,
+        "ln_chat_id": "7c1RWtbSWAScLlrxokxevg",
+        "messages_sent": [
+            {
+                "channel": "linkedin",
+                "text": "Caio, obrigado por conectar!\n\nQuais têm sido os principais desafios por aí na frente comercial?",
+                "sent_at": "2026-07-30T11:51:04Z",
+            },
+            {
+                "_type": "wait_meta",
+                "wait_type": "waiting_reply",
+                "timeout_at": "2026-08-06T11:51:04Z",
+                "started_at": "2026-07-30T11:51:04Z",
+            },
+        ],
+        "playbook_stage": 1,
+    })
+    fake_db = FakeFlowKGCDB(entry)
+
+    monkeypatch.setattr(runner, "db", fake_db)
+    monkeypatch.setattr(runner, "_fetch_lead_signals", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(runner, "_refresh_entry_from_signals", lambda current, _signals: current)
+    monkeypatch.setattr(runner, "_audit", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_u_get", lambda path, _params=None: [
+        {"is_sender": True, "timestamp": "2026-07-30T11:51:04Z", "text": "DM enviada"},
+        {
+            "is_sender": False,
+            "timestamp": "2026-07-30T12:20:00Z",
+            "text": "Os desafios não estão muito voltados para o ICP, mas sim para estruturação do funil comercial, porém, estamos com um apoio bem bacana da RD hoje",
+        },
+    ] if path.endswith("/messages") else {})
+    monkeypatch.setattr(
+        runner,
+        "_classify_and_draft",
+        lambda *_args, **_kwargs: ("NEUTRO", "E como estão estruturando o funil comercial hoje?"),
+    )
+
+    runner.advance(fake_db.get_entry(entry["id"]))
+
+    updated = fake_db.get_entry(entry["id"])
+    assert updated["step_status"] == "waiting_approval"
+    assert updated["pending_draft"] == "E como estão estruturando o funil comercial hoje?"
+    assert updated["reply_received"].startswith("Os desafios não estão muito voltados")
+    assert "obrigado por conectar" not in updated["pending_draft"].lower()
 
 
 def test_signals_block_prefers_page_engagement_over_generic_follow_page(monkeypatch):
