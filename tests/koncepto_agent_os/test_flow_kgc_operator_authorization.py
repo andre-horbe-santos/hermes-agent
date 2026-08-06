@@ -89,6 +89,7 @@ class FakeFlowKGCDB:
             },
         }
         self.sent = []
+        self.discarded = []
 
     def get_operators(self):
         return copy.deepcopy(self.operators)
@@ -129,6 +130,12 @@ class FakeFlowKGCDB:
     def send_approved_draft(self, entry_id: str, text_sent: str, channel: str):
         self.sent.append((entry_id, text_sent, channel))
         return {"ok": True}
+
+    def discard_entry(self, entry_id: str, reason: str):
+        self.discarded.append((entry_id, reason))
+        if entry_id in self.entries:
+            self.entries[entry_id]["status"] = "discarded"
+        return self.get_entry(entry_id)
 
     def _patch(self, _table: str, patch: dict, _col: str, entry_id: str):
         if entry_id in self.entries:
@@ -216,6 +223,44 @@ def test_send_reply_allows_authorized_profile(monkeypatch):
     assert status == 200
     assert response.get_json()["ok"] is True
     assert fake_db.sent == [("entry-jefferson", "mensagem validada", "linkedin")]
+
+
+def test_kanban_action_discard_rejects_unauthorized_profile(monkeypatch):
+    app_module = _load_dashboard_app()
+    fake_db = FakeFlowKGCDB()
+    monkeypatch.setattr(app_module, "fkgc_db", fake_db)
+    monkeypatch.setattr(app_module, "FKGC_ENABLED", True)
+
+    with app_module.app.test_request_context(
+        "/api/flow-kgc/kanban/action",
+        method="POST",
+        json={"action": "discard", "entry_id": "entry-andre", "reason": "outro"},
+    ):
+        _login_session(app_module, "jefferson@konceptogc.com", "Jefferson Frasnelli")
+        response, status = _unwrap_response(app_module.fkgc_kanban_action())
+
+    assert status == 403
+    assert response.get_json()["error"] == "Você não tem permissão para operar este perfil"
+    assert fake_db.discarded == []
+
+
+def test_kanban_action_discard_allows_authorized_profile(monkeypatch):
+    app_module = _load_dashboard_app()
+    fake_db = FakeFlowKGCDB()
+    monkeypatch.setattr(app_module, "fkgc_db", fake_db)
+    monkeypatch.setattr(app_module, "FKGC_ENABLED", True)
+
+    with app_module.app.test_request_context(
+        "/api/flow-kgc/kanban/action",
+        method="POST",
+        json={"action": "discard", "entry_id": "entry-jefferson", "reason": "sem_fit"},
+    ):
+        _login_session(app_module, "jefferson@konceptogc.com", "Jefferson Frasnelli")
+        response, status = _unwrap_response(app_module.fkgc_kanban_action())
+
+    assert status == 200
+    assert response.get_json()["ok"] is True
+    assert fake_db.discarded == [("entry-jefferson", "sem_fit")]
 
 
 def test_operator_update_is_admin_only(monkeypatch):
