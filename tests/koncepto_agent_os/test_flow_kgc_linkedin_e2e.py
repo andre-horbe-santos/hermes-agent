@@ -291,7 +291,6 @@ def test_jefferson_followup_loop_advances_and_resets_to_wait_reply(monkeypatch):
 
     monkeypatch.setattr(runner, "db", fake_db)
     monkeypatch.setattr(runner, "_audit", lambda *args, **kwargs: None)
-    monkeypatch.setattr(runner, "_notify_pending_approval", lambda *args, **kwargs: None)
     monkeypatch.setattr(runner, "_fetch_lead_signals", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(runner, "_refresh_entry_from_signals", lambda entry, _signals: entry)
     monkeypatch.setattr(runner, "_business_hours", lambda *_args, **_kwargs: True)
@@ -349,7 +348,6 @@ def test_jefferson_reaction_only_skips_to_followup_loop(monkeypatch):
 
     monkeypatch.setattr(runner, "db", fake_db)
     monkeypatch.setattr(runner, "_audit", lambda *args, **kwargs: None)
-    monkeypatch.setattr(runner, "_notify_pending_approval", lambda *args, **kwargs: None)
     monkeypatch.setattr(runner, "_fetch_lead_signals", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(runner, "_refresh_entry_from_signals", lambda entry, _signals: entry)
     monkeypatch.setattr(runner, "_business_hours", lambda *_args, **_kwargs: True)
@@ -404,7 +402,6 @@ def test_ln_message_without_chat_keeps_manual_approval_instead_of_failing(monkey
 
     monkeypatch.setattr(runner, "db", fake_db)
     monkeypatch.setattr(runner, "_audit", lambda *args, **kwargs: None)
-    monkeypatch.setattr(runner, "_notify_pending_approval", lambda *args, **kwargs: None)
     monkeypatch.setattr(runner, "_business_hours", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(runner, "_fetch_lead_signals", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(runner, "_refresh_entry_from_signals", lambda entry, _signals: entry)
@@ -552,7 +549,7 @@ def test_signals_block_prefers_page_engagement_over_generic_follow_page(monkeypa
     signals = {
         "lead": {"follows_company_page": True},
         "leadmagnet": {},
-        "page_engagement": {"event_type": "page_post_comment", "comment_text": "Ótimo conteúdo"},
+        "page_engagement": {"event_type": "page_post_comment", "post_content": "Ótimo conteúdo"},
     }
 
     monkeypatch.setattr(runner.db, "get_operator", lambda _op_id: {"display_name": "Jefferson Frasnelli"})
@@ -580,7 +577,6 @@ def test_flow_kgc_linkedin_sandbox_reaches_manual_approval(monkeypatch, flow_id,
     monkeypatch.setattr(runner, "db", fake_db)
     monkeypatch.setattr(runner, "_audit", lambda *args, **kwargs: None)
     monkeypatch.setattr(runner, "_social_event", lambda *args, **kwargs: None)
-    monkeypatch.setattr(runner, "_notify_pending_approval", lambda *args, **kwargs: None)
     monkeypatch.setattr(runner, "_fetch_lead_signals", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(runner, "detect_channel", lambda _entry: ("linkedin", None))
     monkeypatch.setattr(runner, "check_accepted", lambda _entry: False)
@@ -592,7 +588,7 @@ def test_flow_kgc_linkedin_sandbox_reaches_manual_approval(monkeypatch, flow_id,
             else {"items": [{"social_id": "social-1", "id": "post-1", "text": "Post real do lead", "url": "https://example.test/post"}]}
         ),
     )
-    monkeypatch.setattr(runner, "_perplexity_research", lambda _entry, scope, sub_scope="": f"[{scope.upper()}: pesquisa {sub_scope or 'base'}]")
+    monkeypatch.setattr(runner, "_perplexity_research", lambda _entry, scope, sub_scope="", lead_profile=None: f"[{scope.upper()}: pesquisa {sub_scope or 'base'}]")
     monkeypatch.setattr(
         runner,
         "_fetch_team_post",
@@ -613,13 +609,18 @@ def test_flow_kgc_linkedin_sandbox_reaches_manual_approval(monkeypatch, flow_id,
         ),
     )
 
-    def _fake_haiku(prompt_template: str, entry: dict, signals=None, max_tokens: int = 400, step_type: str = "") -> str:
+    def _fake_haiku(prompt_template: str, entry: dict, signals=None, max_tokens: int = 400, step_type: str = "",
+                     stage_override: int | None = None, extra_instructions: str = "") -> str:
         prompt_log.append((step_type, prompt_template))
         first_name = runner._safe_first_name(entry.get("full_name", ""))
         if step_type == "ln_message":
             return f"Rascunho LinkedIn para {first_name}"
         if step_type == "ln_invite":
-            return f"Convite LinkedIn para {first_name}"
+            # Desde a remoção do CTA fixo (__CTA_ESCOLHIDA__/cta_options, 2026-07-16 —
+            # duplicava a pergunta, achado real "Vamos nos conectar? Vale uma conversa?"),
+            # o convite fecha com a própria pergunta do modelo — o mock simula isso aqui
+            # em vez de depender de um CTA injetado por cima, que não existe mais.
+            return f"Convite LinkedIn para {first_name}. Vale uma conversa?"
         return f"Texto gerado para {step_type or 'step'}"
 
     monkeypatch.setattr(runner, "_haiku", _fake_haiku)
