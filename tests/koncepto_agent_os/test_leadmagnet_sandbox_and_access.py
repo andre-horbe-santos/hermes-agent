@@ -7,8 +7,10 @@ from pathlib import Path
 
 
 def _load_dashboard_app():
-    repo_root = Path(__file__).resolve().parents[2]
-    app_path = repo_root / "koncepto-agent-os" / "dashboard" / "app.py"
+    # ~/.hermes é o único clone canônico desde a consolidação (koncepto-agent-os/,
+    # o clone aninhado dentro de hermes-agent/, foi removido).
+    koncepto_root = Path(__file__).resolve().parents[3]
+    app_path = koncepto_root / "dashboard" / "app.py"
 
     module_names = [
         "sales_signal",
