@@ -105,6 +105,23 @@ class FakeFlowKGCDB:
             items = [item for item in items if item.get("operator_id") == operator_id]
         return [copy.deepcopy(item) for item in items[:limit]]
 
+    def count_pending_approval(self, operator_id: str | None = None) -> int:
+        items = list(self.entries.values())
+        if operator_id:
+            items = [item for item in items if item.get("operator_id") == operator_id]
+        return len(items)
+
+    def _now(self) -> str:
+        return "2026-07-09T12:00:00Z"
+
+    def _patch_conditional(self, _table: str, record: dict, filters: dict):
+        entry_id = filters.get("id", "").removeprefix("eq.")
+        entry = self.entries.get(entry_id)
+        if not entry:
+            return []
+        entry.update(record)
+        return [copy.deepcopy(entry)]
+
     def get_entry(self, entry_id: str):
         entry = self.entries.get(entry_id)
         return copy.deepcopy(entry) if entry else None
@@ -165,6 +182,28 @@ def test_send_reply_allows_authorized_profile(monkeypatch):
     fake_db = FakeFlowKGCDB()
     monkeypatch.setattr(app_module, "fkgc_db", fake_db)
     monkeypatch.setattr(app_module, "FKGC_ENABLED", True)
+
+    # Desde 2026-08-04, fkgc_send_reply dispara o envio real numa thread em
+    # background (queued=True) em vez de bloquear a requisição — o motor real
+    # (_fkgc_send_reply_sync) importa flow_kgc.runner de verdade, fora do
+    # escopo desta fake de autorização. Aqui o alvo é só o gate de acesso,
+    # então trocamos o motor por um stub e a thread por execução síncrona
+    # (senão a asserção corre antes da thread real terminar).
+    def _fake_send_reply_sync(data=None):
+        d = data or {}
+        fake_db.send_approved_draft(d.get("entry_id"), d.get("text"), "linkedin")
+        return app_module.jsonify({"ok": True})
+
+    monkeypatch.setattr(app_module, "_fkgc_send_reply_sync", _fake_send_reply_sync)
+
+    class _SyncThread:
+        def __init__(self, target=None, name=None, daemon=None, args=(), kwargs=None):
+            self._target, self._args, self._kwargs = target, args, kwargs or {}
+
+        def start(self):
+            self._target(*self._args, **self._kwargs)
+
+    monkeypatch.setattr(app_module.threading, "Thread", _SyncThread)
 
     with app_module.app.test_request_context(
         "/api/flow-kgc/send-reply",
