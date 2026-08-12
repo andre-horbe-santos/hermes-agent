@@ -574,6 +574,15 @@ TOOLSETS = {
         "includes": []
     },
 
+    "hubspot_report": {
+        "description": (
+            "Read-only ad hoc HubSpot deal report (hs_report_deals) — pipeline "
+            "aberto / FUPs por dono, sob demanda em conversa (não é cron fixo)."
+        ),
+        "tools": ["hs_report_deals"],
+        "includes": [],
+    },
+
     "hermes-gateway": {
         "description": "Gateway toolset - union of all messaging platform tools",
         "tools": [],
