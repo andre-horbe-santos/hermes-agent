@@ -1340,6 +1340,20 @@ and name. It may request personal e-mail and phone reveal, create a contact
 through `POST /api/v1/contacts` when no e-mail is found, and register the
 phone-reveal webhook at `/api/apollo/phone-reveal-webhook`.
 
+### Dashboard Flow KGC context alignment
+
+The dashboard Flow KGC conversation context now reuses the same lead/company/
+lead-profile enrichment that the dossiê already uses. When
+`api_conversations_context` builds `flow_kgc.llm_context_blocks`, it passes the
+resolved lead data into `_parse_fkgc_llm_context()` so `RAPPORT`, `EMPRESA`,
+and `PERSONA` do not disappear outside the dossiê view.
+
+The regression for this lives in
+`dashboard/tests/test_flow_kgc_send_reply_regression.py`. Recent Flow KGC work
+also tightened the shared operator filter across Fila/Kanban/Aprovações and
+kept the LeadMagnet metrics path wired into the dashboard side panels. Treat
+those as behavior contracts rather than snapshots.
+
 ### Operational snapshot
 
 As of 2026-07-24, the Supabase `kit_leads` table contained 111 records: 108
