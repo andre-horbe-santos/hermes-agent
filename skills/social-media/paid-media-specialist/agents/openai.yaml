@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paid Media Specialist"
+  short_description: "Audita e otimiza campanhas com segurança"
+  default_prompt: "Use $paid-media-specialist para auditar minhas campanhas e propor otimizações com evidências."
