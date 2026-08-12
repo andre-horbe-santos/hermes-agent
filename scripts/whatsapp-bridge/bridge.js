@@ -401,11 +401,11 @@ async function startSocket() {
         if (chatId.includes('status')) continue;
 
         if (isGroup) {
-          // Allow fromMe document messages in groups — user forwarding files for bot processing.
-          // Bot never sends documents as replies, so these are never echo-backs.
-          const _mc = getMessageContent(msg);
-          if (!_mc?.documentMessage || recentlySentIds.has(msg.key.id)) continue;
-          // Fall through to process the document normally.
+          // Fall through for all fromMe group messages (text and documents —
+          // the operator shares the bot's WhatsApp number, so this is the
+          // only way an @mention typed by a human reaches the agent). Echo
+          // loops are caught downstream by the REPLY_PREFIX/recentlySentIds
+          // guard once the body is extracted, not here.
         } else if (WHATSAPP_MODE !== 'bot') {
           // Self-chat mode: only allow messages in the user's own self-chat.
           // In bot mode we skip DMs later (after command checks) so !wa still works.
