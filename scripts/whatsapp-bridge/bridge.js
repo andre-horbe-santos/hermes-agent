@@ -506,6 +506,15 @@ async function startSocket() {
       const quotedParticipant = normalizeWhatsAppId(contextInfo?.participant || '') || null;
       const quotedRemoteJid = normalizeWhatsAppId(contextInfo?.remoteJid || '') || null;
       const hasQuotedMessage = !!contextInfo?.quotedMessage;
+      const quotedMessageContent = contextInfo?.quotedMessage || null;
+      const quotedText = quotedMessageContent
+        ? (quotedMessageContent.conversation
+          || quotedMessageContent.extendedTextMessage?.text
+          || quotedMessageContent.imageMessage?.caption
+          || quotedMessageContent.videoMessage?.caption
+          || quotedMessageContent.documentMessage?.caption
+          || '')
+        : '';
 
       // Extract message body
       let body = '';
@@ -633,6 +642,7 @@ async function startSocket() {
         quotedParticipant,
         quotedRemoteJid,
         hasQuotedMessage,
+        quotedText,
         botIds,
         timestamp: msg.messageTimestamp,
       };
