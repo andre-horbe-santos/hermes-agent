@@ -74,6 +74,26 @@ class TestOpenRouter:
         )
         assert agent._anthropic_prompt_cache_policy() == (False, False)
 
+    def test_gemini_on_openrouter_caches_with_envelope_layout(self):
+        """OpenRouter Gemini uses content-level cache_control breakpoints."""
+        agent = _make_agent(
+            provider="openrouter",
+            base_url="https://openrouter.ai/api/v1",
+            api_mode="chat_completions",
+            model="google/gemini-2.5-flash",
+        )
+        assert agent._anthropic_prompt_cache_policy() == (True, False)
+
+    def test_google_model_on_generic_openai_gateway_does_not_cache(self):
+        """Do not leak OpenRouter-specific fields to arbitrary gateways."""
+        agent = _make_agent(
+            provider="custom",
+            base_url="https://example.com/v1",
+            api_mode="chat_completions",
+            model="google/gemini-2.5-flash",
+        )
+        assert agent._anthropic_prompt_cache_policy() == (False, False)
+
 
 class TestThirdPartyAnthropicGateway:
     """Third-party gateways speaking the Anthropic protocol (MiniMax, Zhipu GLM, LiteLLM)."""
@@ -329,4 +349,3 @@ class TestExplicitOverrides:
 # ─────────────────────────────────────────────────────────────────────
 # Long-lived prefix cache policy (cross-session 1h tier)
 # ─────────────────────────────────────────────────────────────────────
-

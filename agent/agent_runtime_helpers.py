@@ -1334,7 +1334,7 @@ def anthropic_prompt_cache_policy(
 
     Returns ``(should_cache, use_native_layout)``:
       * ``should_cache`` — inject ``cache_control`` breakpoints for this
-        request (applies to OpenRouter Claude, native Anthropic, and
+        request (applies to OpenRouter Claude/Gemini, native Anthropic, and
         third-party gateways that speak the native Anthropic protocol).
       * ``use_native_layout`` — place markers on the *inner* content
         blocks (native Anthropic accepts and requires this layout);
@@ -1377,6 +1377,14 @@ def anthropic_prompt_cache_policy(
     if is_native_anthropic:
         return True, True
     if (is_openrouter or is_nous_portal) and is_claude:
+        return True, False
+    # OpenRouter's Gemini route accepts Anthropic-style cache_control
+    # breakpoints inside message content.  Gemini 2.5+ also has implicit
+    # caching, but the explicit breakpoint lets OpenRouter select and keep
+    # the cacheable prefix consistently across turns.  Keep this scoped to
+    # OpenRouter: generic OpenAI-compatible Google gateways may reject the
+    # otherwise-unknown cache_control field.
+    if is_openrouter and "gemini" in model_lower:
         return True, False
     # Nous Portal Qwen (e.g. qwen3.6-plus) takes the same envelope-layout
     # cache_control path as Portal Claude. Portal proxies to OpenRouter
