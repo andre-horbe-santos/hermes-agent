@@ -61,6 +61,7 @@ def _load_flow_kgc_modules(monkeypatch):
 class FakeFlowKGCDB:
     def __init__(self, entry: dict):
         self.entries = {entry["id"]: copy.deepcopy(entry)}
+        self.scheduled_jumps: list[tuple[str, int, int]] = []
 
     def _entry(self, entry_id: str) -> dict:
         return self.entries[entry_id]
@@ -138,6 +139,7 @@ class FakeFlowKGCDB:
         return self.get_entry(entry_id)
 
     def jump_to_step_scheduled(self, entry_id: str, step_idx: int, _delay_sec: int) -> dict:
+        self.scheduled_jumps.append((entry_id, step_idx, _delay_sec))
         return self.jump_to_step(entry_id, step_idx)
 
     def set_waiting(self, entry_id: str, wait_type: str, _timeout_days: int, **_kwargs) -> dict:
@@ -473,6 +475,7 @@ def test_linkedin_acceptance_opens_chat_and_routes_to_post_connection_dm(
     assert updated["ln_chat_id"] == "chat-accepted"
     assert updated["current_step"] == message_step
     assert updated["step_status"] == "pending"
+    assert fake_db.scheduled_jumps == [(entry["id"], message_step, 0)]
     assert ("invite_accepted", {"linkedin_id": "lead-linkedin-id"}) in audits
     assert flow_steps.FLOWS[flow_id]["steps"][wait_step]["branch_accept"] == message_step
 
