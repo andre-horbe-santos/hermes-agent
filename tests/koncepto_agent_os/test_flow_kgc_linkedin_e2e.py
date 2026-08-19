@@ -560,6 +560,28 @@ def test_signals_block_prefers_page_engagement_over_generic_follow_page(monkeypa
     assert "segue a página da Koncepto" not in block
 
 
+def test_apollo_connected_reactivation_prompt_is_shared_and_strict(monkeypatch):
+    _, _db_module, flow_steps = _load_flow_kgc_modules(monkeypatch)
+
+    def _prompt_for(flow_id: str) -> str:
+        step = next(step for step in flow_steps.FLOWS[flow_id]["steps"] if step.get("type") == "ln_message")
+        return step["prompt_if_connected"]
+
+    prompt_v2 = _prompt_for("kgc_ii_ln_v2")
+    prompt_v3 = _prompt_for("kgc_ii_ln_v3")
+
+    assert prompt_v2 == prompt_v3
+    assert "máximo 3 linhas" in prompt_v3.lower()
+    assert "não trate isso como convite novo" in prompt_v3.lower()
+    assert "não use 'para comemorar nossa conexão'" in prompt_v3.lower()
+    assert "não faça pitch" in prompt_v3.lower()
+    assert "cargo, porte e crescimento isoladamente não provam maturidade" in prompt_v3.lower()
+    assert "sem maturidade comprovada" in prompt_v3.lower()
+    assert "maturidade intermediária" in prompt_v3.lower()
+    assert "maturidade alta" in prompt_v3.lower()
+    assert "processos e ritos comerciais" in prompt_v3.lower()
+
+
 @pytest.mark.parametrize(
     ("flow_id", "expected_step", "expected_prompt_marker"),
     [
