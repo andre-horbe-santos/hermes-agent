@@ -563,6 +563,33 @@ def test_signals_block_prefers_page_engagement_over_generic_follow_page(monkeypa
     assert "segue a página da Koncepto" not in block
 
 
+def test_signals_block_includes_v4_profile_evidence_when_prepared(monkeypatch):
+    runner, _db_module, _flow_steps = _load_flow_kgc_modules(monkeypatch)
+    entry = {
+        "id": "lead-1",
+        "full_name": "Thiago Angulski",
+        "company_name": "Predialize | Gestão pós-obra",
+        "company_industry": "construction",
+        "flow_id": "kgc_ii_ln",
+        "operator_id": "andre",
+        "metadata": {
+            "v4_preparation": {
+                "company_evidence": ["A empresa atua em um mercado com ciclo comercial consultivo."],
+                "profile_evidence": ["O perfil menciona CRM."],
+            }
+        },
+    }
+    signals = {"lead": {"follows_company_page": False}, "leadmagnet": {}}
+
+    monkeypatch.setattr(runner.db, "get_operator", lambda _op_id: {"display_name": "André Santos"})
+
+    block = runner._signals_block(signals, entry=entry, step_type="ln_message")
+
+    assert "BLOCO V4 DE EVIDÊNCIAS CONFIRMADAS" in block
+    assert "O perfil menciona CRM." in block
+    assert "A empresa atua em um mercado com ciclo comercial consultivo." in block
+
+
 def test_apollo_connected_reactivation_prompt_is_shared_and_strict(monkeypatch):
     _, _db_module, flow_steps = _load_flow_kgc_modules(monkeypatch)
 
@@ -583,6 +610,8 @@ def test_apollo_connected_reactivation_prompt_is_shared_and_strict(monkeypatch):
     assert "maturidade intermediária" in prompt_v3.lower()
     assert "maturidade alta" in prompt_v3.lower()
     assert "processos e ritos comerciais" in prompt_v3.lower()
+    assert "apollo-io" in prompt_v3.lower()
+    assert "menção leve" in prompt_v3.lower()
 
 
 @pytest.mark.parametrize(

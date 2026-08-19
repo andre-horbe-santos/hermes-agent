@@ -95,3 +95,34 @@ def test_entry_collector_recovers_legacy_material_not_present_in_catalog():
 
     assert snapshot.signals.leadmagnet_received == ("Objeções de Vendas",)
     assert snapshot.signals.landing_pages_downloaded == ()
+
+
+def test_entry_collector_extracts_explicit_platform_mentions_from_profile():
+    collector = EntryCollectors(
+        rest_get=lambda table, params: [{
+            "id": "lead-1",
+            "first_name": "Mariana",
+            "last_name": "Bonini",
+            "company_id": "softexpert",
+            "linkedin_username": "mariana-bonini",
+            "linkedin_url": "https://www.linkedin.com/in/mariana-bonini",
+            "headline": (
+                "Revenue Operations (RevOps) & Sales Enablement Manager | "
+                "CRM Optimization | GTM Orchestration | Sales Tools"
+            ),
+            "job_title": "Revenue Operations (RevOps) & Sales Enablement Manager",
+        }] if table == "ssk_leads" and params.get("id") else [],
+        resolve_provider_id=lambda vanity, entry: "mariana-bonini",
+        find_existing_chat=lambda provider, entry: None,
+        get_chat_history=lambda *args: [],
+    )
+
+    snapshot = collector.collect({
+        "lead_uuid": "lead-1",
+        "linkedin_id": "mariana-bonini",
+        "linkedin_url": "https://www.linkedin.com/in/mariana-bonini",
+    })
+
+    assert snapshot.profile_evidence == ("O perfil menciona CRM.",)
+    assert snapshot.company_evidence == ()
+    assert snapshot.signals.engagement_intent_score == 0
