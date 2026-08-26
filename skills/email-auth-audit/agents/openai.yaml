@@ -1,0 +1,4 @@
+interface:
+  display_name: "Email Authentication Audit"
+  short_description: "Audit SPF, DKIM, and DMARC DNS records"
+  default_prompt: "Audit the SPF, DKIM, and DMARC configuration for a domain and explain actionable findings."
