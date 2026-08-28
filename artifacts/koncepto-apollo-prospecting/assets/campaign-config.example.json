@@ -1,0 +1,13 @@
+{
+  "company": "Empresa",
+  "offer": "Oferta",
+  "market": "Brasil",
+  "goal": {"type": "meetings", "value": 10, "period": "month"},
+  "icp": {"industries": [], "employee_ranges": [], "regions": [], "technologies": []},
+  "personas": [],
+  "exclusions": ["customers", "open_opportunities", "opt_out", "invalid_email"],
+  "daily_new_contact_limit": 5,
+  "timezone": "America/Sao_Paulo",
+  "linkedin_mode": "manual_task",
+  "approval_required_for_writes": true
+}

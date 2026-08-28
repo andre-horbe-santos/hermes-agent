@@ -1,0 +1,18 @@
+{
+  "version": "3.0.0",
+  "rule": "Uma resposta só autoriza o avanço sustentado por evidência.",
+  "cases": [
+    {"id":"A","lead":"Cada vendedor faz do próprio jeito.","expected_state":"S1/S2","decision":"permanecer","missing":"impacto"},
+    {"id":"B","lead":"Funciona bem assim.","expected_state":"S1/S2","decision":"permanecer","missing":"melhoria desejada"},
+    {"id":"C","lead":"Esse é justamente nosso maior problema.","expected_state":"S2","decision":"avançar_descoberta","missing":"natureza e impacto"},
+    {"id":"D","lead":"Estamos implantando outra ferramenta.","expected_state":"S1/S2","decision":"permanecer","missing":"objetivo e sobreposição"},
+    {"id":"E","lead":"Pode explicar o que vocês fazem?","expected_state":"S1","decision":"explicar_e_descobrir","missing":"problema concreto"},
+    {"id":"F","lead":"Quanto custa?","expected_state":"S1","decision":"responder_com_politica_de_preco","missing":"escopo"},
+    {"id":"G","lead":"Manda um material.","expected_state":"S1","decision":"microcompromisso","missing":"tema relevante"},
+    {"id":"H","lead":"Agora não tenho tempo.","expected_state":"S10","decision":"pausar","missing":"data ou evento"},
+    {"id":"I","lead":"Fale com a Patrícia, nossa gerente comercial.","expected_state":"roteamento","decision":"redirecionar","missing":"autorização para citar"},
+    {"id":"J","lead":"Não tenho interesse.","expected_state":"S11","decision":"encerrar","missing":"nenhuma"},
+    {"id":"K","lead":"Já temos uma consultoria.","expected_state":"S1/S2","decision":"permanecer","missing":"escopo e satisfação"},
+    {"id":"L","lead":"Interessante.","expected_state":"S1","decision":"permanecer","missing":"interesse específico"}
+  ]
+}

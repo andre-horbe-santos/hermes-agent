@@ -1,0 +1,22 @@
+{
+  "generated_at": "2026-08-27T15:00:00-03:00",
+  "period": "Piloto — últimos 30 dias",
+  "campaign": "Koncepto | Prospecção B2B",
+  "source": "Apollo MCP (exemplo)",
+  "coverage": "Dados ilustrativos; substituir após conexão",
+  "metrics": {"accounts": 42, "contacts": 85, "active": 20, "tasks_due": 7, "delivered": 56, "replies": 8, "positive_replies": 3, "meetings": 2, "opportunities": 1},
+  "deal_flow": [
+    {"stage": "Contatos", "required": 300, "planned": 300, "actual": 85},
+    {"stage": "Respostas positivas", "required": 18, "planned": 18, "actual": 3},
+    {"stage": "Reuniões", "required": 10, "planned": 10, "actual": 2}
+  ],
+  "sequences": [
+    {"name": "Prospecção", "active": 12, "tasks_due": 3, "replies": 5, "meetings": 1},
+    {"name": "Mudança de contato", "active": 3, "tasks_due": 1, "replies": 1, "meetings": 0},
+    {"name": "Retomada agendada", "active": 2, "tasks_due": 2, "replies": 1, "meetings": 1},
+    {"name": "Retomada 90 dias", "active": 3, "tasks_due": 1, "replies": 1, "meetings": 0}
+  ],
+  "alerts": [{"severity": "high", "title": "EXEMPLO", "detail": "Não usar estes números para decisão; conectar ao Apollo."}],
+  "queue": [{"due": "2026-08-28", "owner": "André", "type": "Retomada agendada", "count": 2}],
+  "notes": ["Painel ilustrativo para validar o formato da V1."]
+}
