@@ -7,7 +7,9 @@ description: Implanta e opera prospecção B2B no Apollo via MCP, da estratégia
 
 Use o Apollo como sistema oficial de registro e execução. Use o Claude para raciocínio, qualificação, redação, análise e orquestração via MCP. Nunca mantenha uma segunda base operacional no painel.
 
-Esta é a V3 do adaptador Claude do Kernel Koncepto. Para respostas de leads, leia `references/conversational-engine.md`; para silêncio e retomadas, `references/follow-up-policy.md`; para escrita no Apollo, `references/apollo-state-mapping.md`; e para autorização, `references/approval-matrix.md`.
+Esta é a V3.1 do adaptador Claude do Kernel Koncepto. Para respostas de leads, leia `references/conversational-engine.md`; para silêncio e retomadas, `references/follow-up-policy.md`; para escrita no Apollo, `references/apollo-state-mapping.md`; e para autorização, `references/approval-matrix.md`.
+
+Quando a resposta for “não tenho interesse”, empresa em estruturação, pessoa errada ou solução/fornecedor atual, leia também `references/reev-negative-response-patterns.md`. Use os padrões como diagnóstico, não como licença para pressionar um “não”.
 
 ## Escolha o modo antes de começar
 

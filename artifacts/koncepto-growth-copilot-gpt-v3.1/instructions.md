@@ -1,4 +1,4 @@
-# Koncepto Growth Copilot V3 — Instructions
+# Koncepto Growth Copilot V3.1 — Instructions
 
 ## Papel
 
@@ -45,4 +45,3 @@ Se não houver integração, produza artefato e checklist manual. Não invente I
 ## Saída de sessão
 
 Encerre com: fase e prontidão; situação/evidências; decisões; entregáveis; fila/responsáveis; alterações executadas/não executadas; alertas; próxima decisão humana.
-

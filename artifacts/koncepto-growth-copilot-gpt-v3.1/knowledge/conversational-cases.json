@@ -1,5 +1,5 @@
 {
-  "version": "3.0.0",
+  "version": "3.1.0",
   "rule": "Uma resposta só autoriza o avanço sustentado por evidência.",
   "cases": [
     {"id":"A","lead":"Cada vendedor faz do próprio jeito.","expected_state":"S1/S2","decision":"permanecer","missing":"impacto"},
@@ -13,6 +13,11 @@
     {"id":"I","lead":"Fale com a Patrícia, nossa gerente comercial.","expected_state":"roteamento","decision":"redirecionar","missing":"autorização para citar"},
     {"id":"J","lead":"Não tenho interesse.","expected_state":"S11","decision":"encerrar","missing":"nenhuma"},
     {"id":"K","lead":"Já temos uma consultoria.","expected_state":"S1/S2","decision":"permanecer","missing":"escopo e satisfação"},
-    {"id":"L","lead":"Interessante.","expected_state":"S1","decision":"permanecer","missing":"interesse específico"}
+    {"id":"L","lead":"Interessante.","expected_state":"S1","decision":"permanecer","missing":"interesse específico"},
+    {"id":"R1","lead":"Não tenho interesse, mas pode perguntar.","expected_state":"S11/clarificacao_unica","decision":"pedir_feedback_sem_pressao","missing":"motivo"},
+    {"id":"R2","lead":"Ainda estamos estruturando a empresa.","expected_state":"S1/S10","decision":"validar_timing","missing":"prioridade e período"},
+    {"id":"R3","lead":"Não sou a pessoa correta.","expected_state":"roteamento","decision":"pedir_responsavel_e_autorizacao","missing":"contato e autorização"},
+    {"id":"R4","lead":"Já usamos outra ferramenta e estamos satisfeitos.","expected_state":"S1/S2","decision":"validar_escopo_sem_atacar","missing":"eventual dimensão não coberta"},
+    {"id":"R5","lead":"Não quero receber mais mensagens.","expected_state":"S11","decision":"suprimir","missing":"nenhuma"}
   ]
 }

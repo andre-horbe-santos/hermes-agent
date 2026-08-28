@@ -43,4 +43,4 @@ Para cada resposta: diagnóstico; evidências literais; inferências; intenção
 - Indicação exige fonte e autorização para citar.
 - “Sem tempo” é pausa; “não quero receber” é supressão.
 - Toda resposta humana pausa a automação até triagem.
-
+- Para os quatro padrões de negativa/objeção catalogados no blog da Reev e adaptados pela Koncepto, use `reev-negative-response-patterns.md`.
