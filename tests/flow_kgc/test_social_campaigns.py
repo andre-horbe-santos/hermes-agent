@@ -64,6 +64,19 @@ def test_explicit_name_marker_becomes_unipile_linkedin_mention():
     assert comment.mentions == ({"name": "Pessoa do Flow", "profile_id": "ACo-target"},)
 
 
+def test_authority_campaign_also_supports_explicit_name_marker():
+    target = SocialTarget("profile-1", "ACo-author", "Perfil Estratégico", strategic=True)
+
+    comment = plan_engagement(
+        "authority-1", "authority", target,
+        [_post(author_linkedin_id="ACo-author")],
+        comment_text="[@nome], esse ponto é importante.", now=NOW,
+    )[1]
+
+    assert comment.comment_text == "{{0}}, esse ponto é importante."
+    assert comment.mentions == ({"name": "Perfil Estratégico", "profile_id": "ACo-author"},)
+
+
 def test_authority_rejects_unmarked_profile_and_accepts_strategic_profile():
     ordinary = SocialTarget("profile-1", "profile-ln", "Perfil")
     with pytest.raises(ValueError, match="perfil estrategico"):
