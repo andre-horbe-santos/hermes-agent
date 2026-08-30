@@ -39,7 +39,7 @@ def test_warmup_plans_like_and_a_manually_approved_comment():
     intents = plan_engagement("campaign-1", CampaignKind.WARMUP, target, [_post()], now=NOW)
 
     assert [intent.action for intent in intents] == ["like", "comment"]
-    assert intents[0].status == "ready"
+    assert intents[0].status == "waiting_approval"
     assert intents[1].status == "waiting_approval"
     assert intents[0].idempotency_key != intents[1].idempotency_key
 
@@ -111,7 +111,9 @@ def test_flow_adapter_preserves_campaign_and_target_identity():
 
 def test_execution_claims_before_unipile_and_does_not_repeat_effect():
     target = SocialTarget("lead-1", "lead-ln", "Lead", lead_uuid="lead-1")
-    like = plan_engagement("campaign-1", "warmup", target, [_post()], now=NOW)[0]
+    like = approve_comment(
+        plan_engagement("campaign-1", "warmup", target, [_post()], now=NOW)[0], ""
+    )
     claimed = set()
     calls = []
 
