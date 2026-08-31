@@ -15,6 +15,7 @@ from sales_signal.social_campaigns import (
     approve_comment,
     execute_intent,
     plan_engagement,
+    vary_comment_for_operator,
 )
 
 
@@ -185,3 +186,24 @@ def test_comment_execution_sends_mentions_separately_from_text():
 
     assert calls[0][1]["text"] == "{{0}}, ótima reflexão."
     assert calls[0][1]["mentions"] == [{"name": "Pessoa do Flow", "profile_id": "ACo-target"}]
+
+
+def test_team_operator_variant_keeps_first_copy_and_changes_next_angle():
+    base = "Boa leitura sobre previsibilidade comercial."
+
+    first = vary_comment_for_operator(base, "andre", [])
+    second = vary_comment_for_operator(base, "jefferson", [first], force=True)
+
+    assert first != second
+    assert first == base
+    assert "mercado percebe valor" in second
+
+
+def test_operator_variant_is_only_added_when_copy_collides():
+    base = "Esse ponto merece atenção."
+
+    assert vary_comment_for_operator(base, "andre", []) == base
+    changed = vary_comment_for_operator(base, "andre", [base])
+
+    assert changed != base
+    assert changed.startswith("Esse ponto merece atenção.")
