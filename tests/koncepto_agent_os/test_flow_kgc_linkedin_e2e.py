@@ -266,6 +266,40 @@ def _make_entry(flow_id: str) -> dict:
     }
 
 
+def test_v4_preparation_is_used_for_linkedin_dm_prompts_without_changing_legacy_entries(monkeypatch):
+    runner, _db_module, _flow_steps = _load_flow_kgc_modules(monkeypatch)
+    entry = _make_entry("kgc_ii_ln_v3")
+    entry.update({
+        "full_name": "Mariana Schlithler Bonini",
+        "position": "Revenue Operations Manager",
+        "headline": "RevOps | Sales Enablement | CRM Optimization",
+        "company_name": "SoftExpert",
+        "company_industry": "technology",
+        "metadata": {
+            "v4_preparation": {
+                "signals": {
+                    "post_comments": ["orquestracao de GTM"],
+                    "leadmagnet_received": ["prospeccao ativa B2B"],
+                },
+                "company_evidence": ["A empresa publica vagas de SDR."],
+                "profile_evidence": ["O perfil menciona RevOps."],
+            }
+        },
+    })
+
+    block = runner._apollo_v4_prompt_block(entry, "ln_message")
+
+    assert "<apollo_campaign_context_v4>" in block
+    assert "RevOps / Sales Enablement" in block
+    assert "comentou em uma publicação sobre orquestracao de GTM" in block
+    assert "A empresa publica vagas de SDR." in block
+    assert runner._apollo_v4_prompt_block(entry, "ln_followup_loop") == ""
+
+    legacy_entry = dict(entry)
+    legacy_entry["metadata"] = {}
+    assert runner._apollo_v4_prompt_block(legacy_entry, "ln_message") == ""
+
+
 def _pump_runner_until_waiting_approval(runner, fake_db: FakeFlowKGCDB, entry_id: str, max_cycles: int = 20) -> dict:
     for _ in range(max_cycles):
         runner.run()
