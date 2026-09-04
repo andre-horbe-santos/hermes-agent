@@ -86,12 +86,26 @@ def _safe_url(raw_url: str, base: str | None = None) -> str:
     return url
 
 
+_MAX_REDIRECTS = 5
+
+
 def _fetch(client: httpx.Client, url: str, base: str | None = None) -> tuple[str, str]:
-    safe = _safe_url(url, base)
-    response = client.get(safe, follow_redirects=True)
-    response.raise_for_status()
-    final = _safe_url(str(response.url))
-    return final, response.text
+    # follow_redirects=True on the client would let httpx chase a redirect to
+    # a private/internal address *before* _safe_url ever sees it — the
+    # request already happened by the time we could reject it. Each hop is
+    # validated here, before it is requested, instead.
+    next_url = _safe_url(url, base)
+    for _ in range(_MAX_REDIRECTS + 1):
+        response = client.get(next_url, follow_redirects=False)
+        if response.is_redirect:
+            location = response.headers.get("location")
+            if not location:
+                response.raise_for_status()
+            next_url = _safe_url(location, next_url)
+            continue
+        response.raise_for_status()
+        return _safe_url(str(response.url)), response.text
+    raise ValueError("too many redirects")
 
 
 def _clean_font(value: str) -> str:
@@ -176,7 +190,7 @@ def design_extract(url: str, max_stylesheets: int = 20, timeout: float = 20.0) -
         with httpx.Client(
             timeout=httpx.Timeout(timeout),
             headers={"User-Agent": "Hermes Design Extractor/1.0"},
-            follow_redirects=True,
+            follow_redirects=False,
         ) as client:
             page_url, page = _fetch(client, url)
             parser = _PageParser()
