@@ -36,6 +36,33 @@ def build_mcp_parser(subparsers, *, cmd_mcp: Callable) -> None:
         action="store_true",
         help="Enable verbose logging on stderr",
     )
+    mcp_serve_p.add_argument(
+        "--transport",
+        choices=("stdio", "streamable-http"),
+        default="stdio",
+        help="MCP transport (default: stdio; use streamable-http for Claude.ai)",
+    )
+    mcp_serve_p.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="HTTP bind host (streamable-http only; default: 127.0.0.1)",
+    )
+    mcp_serve_p.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="HTTP bind port (streamable-http only; default: 8000)",
+    )
+    mcp_serve_p.add_argument(
+        "--auth-token-env",
+        default="HERMES_MCP_TOKEN",
+        help="Environment variable containing the HTTP Bearer token",
+    )
+    mcp_serve_p.add_argument(
+        "--insecure",
+        action="store_true",
+        help="Allow unauthenticated HTTP MCP requests (unsafe; local testing only)",
+    )
     add_accept_hooks_flag(mcp_serve_p)
 
     mcp_add_p = mcp_sub.add_parser(

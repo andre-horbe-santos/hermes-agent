@@ -1015,6 +1015,38 @@ class TestCliIntegration:
         mock_run.assert_called_once_with(verbose=True)
 
 
+class TestMcpHttpTransport:
+    def test_requires_bearer_token_and_serves_initialize(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        from starlette.testclient import TestClient
+        from mcp_serve import create_mcp_http_app
+
+        app = create_mcp_http_app(auth_token="test-token")
+        with TestClient(app, base_url="http://127.0.0.1:8000") as client:
+            payload = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": {"name": "test", "version": "1"},
+                },
+            }
+            assert client.post("/mcp", json=payload).status_code == 401
+            response = client.post(
+                "/mcp",
+                headers={
+                    "Authorization": "Bearer test-token",
+                    "Accept": "application/json, text/event-stream",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            assert response.status_code == 200
+            assert '"protocolVersion"' in response.text
+
+
 # ---------------------------------------------------------------------------
 # 6. EDGE CASES
 # ---------------------------------------------------------------------------

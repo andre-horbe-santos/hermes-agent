@@ -918,7 +918,20 @@ def mcp_command(args):
 
     if action == "serve":
         from mcp_serve import run_mcp_server
-        run_mcp_server(verbose=getattr(args, "verbose", False))
+        transport = getattr(args, "transport", "stdio")
+        if transport == "stdio":
+            # Keep the old call shape for embedders and integrations that
+            # dispatch the stdio server programmatically.
+            run_mcp_server(verbose=getattr(args, "verbose", False))
+        else:
+            run_mcp_server(
+                verbose=getattr(args, "verbose", False),
+                transport=transport,
+                host=getattr(args, "host", "127.0.0.1"),
+                port=getattr(args, "port", 8000),
+                auth_token_env=getattr(args, "auth_token_env", "HERMES_MCP_TOKEN"),
+                insecure=getattr(args, "insecure", False),
+            )
         return
 
     # Catalog subcommands live in mcp_picker / mcp_catalog. Import lazily so

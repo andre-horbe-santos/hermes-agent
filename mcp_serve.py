@@ -15,6 +15,8 @@ Plus: channels_list (Hermes-specific extra)
 Usage:
     hermes mcp serve
     hermes mcp serve --verbose
+    HERMES_MCP_TOKEN='replace-with-a-secret' hermes mcp serve \
+        --transport streamable-http --host 0.0.0.0 --port 8000
 
 MCP client config (e.g. claude_desktop_config.json):
     {
@@ -30,6 +32,7 @@ MCP client config (e.g. claude_desktop_config.json):
 from __future__ import annotations
 
 import json
+import hmac
 import logging
 import os
 import re
@@ -870,8 +873,92 @@ def create_mcp_server(event_bridge: Optional[EventBridge] = None) -> "FastMCP":
 # Entry point
 # ---------------------------------------------------------------------------
 
-def run_mcp_server(verbose: bool = False) -> None:
-    """Start the Hermes MCP server on stdio."""
+class _BearerAuthMiddleware:
+    """Small ASGI middleware for protecting the remote MCP endpoint.
+
+    A static bearer token is deliberately opt-in through the environment.  In
+    particular, starting an HTTP server without a token must not accidentally
+    publish access to all messaging conversations.
+    """
+
+    def __init__(self, app, token: Optional[str]):
+        self.app = app
+        self.token = token
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = {
+            key.lower(): value
+            for key, value in scope.get("headers", [])
+        }
+        supplied = headers.get(b"authorization", b"").decode("latin-1")
+        expected = f"Bearer {self.token}" if self.token else ""
+        if not self.token or not hmac.compare_digest(supplied, expected):
+            body = b'{"error":"Unauthorized"}'
+            await send({
+                "type": "http.response.start",
+                "status": 401,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"www-authenticate", b'Bearer realm="hermes-mcp"'),
+                    (b"content-length", str(len(body)).encode("ascii")),
+                ],
+            })
+            await send({"type": "http.response.body", "body": body})
+            return
+        await self.app(scope, receive, send)
+
+
+def create_mcp_http_app(
+    event_bridge: Optional[EventBridge] = None,
+    *,
+    auth_token: Optional[str] = None,
+):
+    """Build the Streamable HTTP ASGI application for remote MCP clients."""
+    if not _MCP_SERVER_AVAILABLE:
+        raise ImportError(
+            "MCP HTTP server requires the 'mcp' package. "
+            f"Install with: {sys.executable} -m pip install 'mcp'"
+        )
+
+    from contextlib import asynccontextmanager
+    from starlette.applications import Starlette
+    from starlette.routing import Mount
+
+    server = create_mcp_server(event_bridge=event_bridge)
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        async with server.session_manager.run():
+            yield
+
+    # FastMCP's default streamable HTTP path is /mcp.  Mounting the app at
+    # / keeps the public URL exactly https://host.example/mcp.
+    app = Starlette(
+        routes=[Mount("/", app=server.streamable_http_app())],
+        lifespan=lifespan,
+    )
+    return _BearerAuthMiddleware(app, auth_token)
+
+
+def run_mcp_server(
+    verbose: bool = False,
+    *,
+    transport: str = "stdio",
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    auth_token_env: str = "HERMES_MCP_TOKEN",
+    insecure: bool = False,
+) -> None:
+    """Start Hermes as an MCP server over stdio or Streamable HTTP.
+
+    The HTTP endpoint is ``/mcp``.  Put TLS and, preferably, IP/rate limiting
+    in a reverse proxy before exposing it to the public internet.  Claude's
+    remote connector sends the token as ``Authorization: Bearer <token>``.
+    """
     if not _MCP_SERVER_AVAILABLE:
         print(
             "Error: MCP server requires the 'mcp' package.\n"
@@ -885,8 +972,43 @@ def run_mcp_server(verbose: bool = False) -> None:
     else:
         logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
 
+    if transport not in {"stdio", "streamable-http"}:
+        raise ValueError(f"Unsupported MCP transport: {transport}")
+
+    if transport == "streamable-http":
+        if not 1 <= port <= 65535:
+            raise ValueError("MCP HTTP port must be between 1 and 65535")
+        token = os.environ.get(auth_token_env, "").strip()
+        if not token and not insecure:
+            print(
+                f"Error: HTTP MCP requires ${auth_token_env}. "
+                "Set it to a secret Bearer token or use --insecure only for local testing.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    else:
+        token = None
+
     bridge = EventBridge()
     bridge.start()
+
+    if transport == "streamable-http":
+        try:
+            import uvicorn
+        except ImportError:
+            print(
+                "Error: HTTP MCP requires uvicorn. Install with: "
+                f"{sys.executable} -m pip install 'uvicorn[standard]'",
+                file=sys.stderr,
+            )
+            bridge.stop()
+            sys.exit(1)
+        app = create_mcp_http_app(event_bridge=bridge, auth_token=token)
+        try:
+            uvicorn.run(app, host=host, port=port, log_level="debug" if verbose else "warning")
+        finally:
+            bridge.stop()
+        return
 
     server = create_mcp_server(event_bridge=bridge)
 
