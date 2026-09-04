@@ -15,6 +15,7 @@
     "qrcode-terminal": "^0.12.0"
   },
   "overrides": {
-    "protobufjs": "^7.5.5"
+    "protobufjs": "^7.5.5",
+    "qs": "^6.16.0"
   }
 }
