@@ -48,6 +48,25 @@ def _get_registered() -> Dict[str, str]:
 # Cache for config-based file list (loaded once per process).
 _config_files: List[Dict[str, str]] | None = None
 
+# Whole secret-store filenames a skill's required_credential_files should
+# never be able to request — no single-integration skill legitimately needs
+# the entire .env, config.yaml, or auth store; only its own narrow token/key
+# file (e.g. google_token.json, which stays allowed). This is exact-basename,
+# not pattern-based, on purpose: the containment check above already stops
+# path traversal, but does nothing to stop a (possibly community-tier, per
+# skills_guard.py's trust tiers) skill's own frontmatter from simply asking
+# for the whole store by name — that request is attacker-controlled content,
+# unlike terminal.credential_files in config.yaml, which is the operator's
+# own explicit choice and is intentionally not filtered here.
+_DENIED_CREDENTIAL_BASENAMES = {
+    ".env", "config.yaml", "auth.json", "auth.lock", "state.db", "users.json",
+}
+
+
+def _is_denied_credential_basename(relative_path: str) -> bool:
+    basename = posixpath.basename(relative_path.replace("\\", "/")).lower()
+    return basename in _DENIED_CREDENTIAL_BASENAMES or basename.endswith(".env")
+
 
 def _resolve_hermes_home() -> Path:
     from hermes_constants import get_hermes_home
@@ -66,7 +85,10 @@ def register_credential_file(
     Security: rejects absolute paths and path traversal sequences (``..``).
     The resolved host path must remain inside HERMES_HOME so that a malicious
     skill cannot declare ``required_credential_files: ['../../.ssh/id_rsa']``
-    and exfiltrate sensitive host files into a container sandbox.
+    and exfiltrate sensitive host files into a container sandbox. Also rejects
+    a handful of whole secret-store filenames (see
+    ``_DENIED_CREDENTIAL_BASENAMES``) that stay inside HERMES_HOME but that no
+    single skill has a legitimate reason to request in full.
     """
     hermes_home = _resolve_hermes_home()
 
@@ -74,6 +96,14 @@ def register_credential_file(
     if os.path.isabs(relative_path):
         logger.warning(
             "credential_files: rejected absolute path %r (must be relative to HERMES_HOME)",
+            relative_path,
+        )
+        return False
+
+    if _is_denied_credential_basename(relative_path):
+        logger.warning(
+            "credential_files: rejected request for whole secret store %r "
+            "(skills may only request their own narrow credential file)",
             relative_path,
         )
         return False

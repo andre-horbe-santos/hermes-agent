@@ -311,6 +311,56 @@ class TestPathTraversalSecurity:
         assert get_credential_file_mounts() == []
 
 
+class TestWholeSecretStoreDenylist:
+    """A skill's required_credential_files stays inside HERMES_HOME (unlike
+    the traversal cases above) but must not be able to request one of the
+    whole secret-store files by name — no single-integration skill needs the
+    entire .env / config.yaml / auth store, only its own narrow token file.
+    """
+
+    @pytest.mark.parametrize("denied_name", [
+        ".env", "config.yaml", "auth.json", "auth.lock", "state.db", "users.json",
+        "service.env",  # any *.env variant, not just the bare filename
+    ])
+    def test_denied_basename_rejected(self, tmp_path, monkeypatch, denied_name):
+        hermes_home = tmp_path / ".hermes"
+        hermes_home.mkdir()
+        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        (hermes_home / denied_name).write_text("secret=value")
+
+        result = register_credential_file(denied_name)
+
+        assert result is False
+        assert get_credential_file_mounts() == []
+
+    def test_denied_basename_rejected_even_in_subdir(self, tmp_path, monkeypatch):
+        """A skill can't route around the denylist via a subdirectory path."""
+        hermes_home = tmp_path / ".hermes"
+        hermes_home.mkdir()
+        subdir = hermes_home / "some" / "nested" / "dir"
+        subdir.mkdir(parents=True)
+        (subdir / ".env").write_text("secret=value")
+        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+
+        result = register_credential_file("some/nested/dir/.env")
+
+        assert result is False
+        assert get_credential_file_mounts() == []
+
+    def test_narrow_integration_token_file_still_allowed(self, tmp_path, monkeypatch):
+        """The denylist must not catch legitimate per-integration credential
+        files — that's the whole point of this passthrough mechanism."""
+        hermes_home = tmp_path / ".hermes"
+        hermes_home.mkdir()
+        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        (hermes_home / "google_token.json").write_text("{}")
+
+        result = register_credential_file("google_token.json")
+
+        assert result is True
+        assert len(get_credential_file_mounts()) == 1
+
+
 # ---------------------------------------------------------------------------
 # Config-based credential files — same containment checks
 # ---------------------------------------------------------------------------
