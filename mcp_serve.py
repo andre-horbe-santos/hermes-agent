@@ -17,6 +17,10 @@ Usage:
     hermes mcp serve --verbose
     HERMES_MCP_TOKEN='replace-with-a-secret' hermes mcp serve \
         --transport streamable-http --host 0.0.0.0 --port 8000
+    # ^ --host 0.0.0.0 is only for a box already behind a reverse proxy /
+    #   firewall that terminates TLS and restricts who can reach the port —
+    #   the token alone is not a substitute for that. Bind 127.0.0.1 and let
+    #   the proxy forward to it if that layer isn't already in place.
 
 MCP client config (e.g. claude_desktop_config.json):
     {
@@ -31,6 +35,7 @@ MCP client config (e.g. claude_desktop_config.json):
 
 from __future__ import annotations
 
+import collections
 import json
 import hmac
 import logging
@@ -879,15 +884,57 @@ class _BearerAuthMiddleware:
     A static bearer token is deliberately opt-in through the environment.  In
     particular, starting an HTTP server without a token must not accidentally
     publish access to all messaging conversations.
+
+    Also rate-limits per client IP (sliding window, in-memory) — the bearer
+    check alone is timing-safe but unthrottled, so a leaked/guessed token (or
+    plain brute-forcing) had no cost. Fine as a single-process in-memory
+    limiter for this use case; not meant to survive a restart or fan out
+    across multiple server processes.
     """
 
-    def __init__(self, app, token: Optional[str]):
+    def __init__(
+        self,
+        app,
+        token: Optional[str],
+        *,
+        rate_limit: int = 30,
+        rate_window_seconds: float = 60.0,
+    ):
         self.app = app
         self.token = token
+        self._rate_limit = rate_limit
+        self._rate_window = rate_window_seconds
+        self._hits: dict[str, "collections.deque[float]"] = collections.defaultdict(collections.deque)
+
+    def _rate_limited(self, client_ip: str) -> bool:
+        now = time.monotonic()
+        hits = self._hits[client_ip]
+        while hits and now - hits[0] > self._rate_window:
+            hits.popleft()
+        if len(hits) >= self._rate_limit:
+            return True
+        hits.append(now)
+        return False
 
     async def __call__(self, scope, receive, send):
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
+            return
+
+        client = scope.get("client")
+        client_ip = client[0] if client else "unknown"
+        if self._rate_limited(client_ip):
+            body = b'{"error":"Too Many Requests"}'
+            await send({
+                "type": "http.response.start",
+                "status": 429,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"retry-after", str(int(self._rate_window)).encode("ascii")),
+                    (b"content-length", str(len(body)).encode("ascii")),
+                ],
+            })
+            await send({"type": "http.response.body", "body": body})
             return
 
         headers = {

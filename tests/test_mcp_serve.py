@@ -1047,6 +1047,70 @@ class TestMcpHttpTransport:
             assert '"protocolVersion"' in response.text
 
 
+@pytest.mark.anyio
+class TestBearerAuthRateLimit:
+    """_BearerAuthMiddleware exercised directly: the bearer check itself was
+    already timing-safe (hmac.compare_digest) but had no throttling in front
+    of it, so a leaked/guessed token — or plain brute-forcing — was free."""
+
+    @staticmethod
+    def _scope(ip: str = "203.0.113.5") -> dict:
+        return {"type": "http", "client": (ip, 5555), "headers": []}
+
+    @staticmethod
+    async def _drive(middleware, scope) -> int:
+        sent = []
+
+        async def receive():
+            return {"type": "http.disconnect"}
+
+        async def send(message):
+            sent.append(message)
+
+        await middleware(scope, receive, send)
+        return next(m["status"] for m in sent if m["type"] == "http.response.start")
+
+    @staticmethod
+    async def _downstream(scope, receive, send):
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    async def test_throttles_after_limit_before_checking_auth(self):
+        from mcp_serve import _BearerAuthMiddleware
+
+        mw = _BearerAuthMiddleware(self._downstream, token=None, rate_limit=3, rate_window_seconds=60.0)
+        statuses = [await self._drive(mw, self._scope()) for _ in range(5)]
+
+        # First 3 requests reach the (failing, token=None) auth check -> 401.
+        # The 4th/5th never reach it -> 429, thrown by the limiter itself.
+        assert statuses == [401, 401, 401, 429, 429]
+
+    async def test_tracks_client_ips_independently(self):
+        from mcp_serve import _BearerAuthMiddleware
+
+        mw = _BearerAuthMiddleware(self._downstream, token=None, rate_limit=2, rate_window_seconds=60.0)
+        statuses_a = [await self._drive(mw, self._scope("203.0.113.10")) for _ in range(2)]
+        statuses_b = [await self._drive(mw, self._scope("203.0.113.20")) for _ in range(2)]
+
+        # Neither IP exhausted the other's budget.
+        assert statuses_a == [401, 401]
+        assert statuses_b == [401, 401]
+
+    async def test_window_expiry_lets_new_requests_through(self, monkeypatch):
+        from mcp_serve import _BearerAuthMiddleware
+
+        fake_now = [1000.0]
+        monkeypatch.setattr("mcp_serve.time.monotonic", lambda: fake_now[0])
+
+        mw = _BearerAuthMiddleware(self._downstream, token=None, rate_limit=1, rate_window_seconds=10.0)
+        scope = self._scope()
+        assert await self._drive(mw, scope) == 401
+        assert await self._drive(mw, scope) == 429  # still within the window
+
+        fake_now[0] += 10.1  # past the window
+        assert await self._drive(mw, scope) == 401  # budget freed up
+
+
 # ---------------------------------------------------------------------------
 # 6. EDGE CASES
 # ---------------------------------------------------------------------------
