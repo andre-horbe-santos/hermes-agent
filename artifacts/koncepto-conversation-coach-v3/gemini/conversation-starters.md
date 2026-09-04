@@ -1,0 +1,1 @@
+- Quero configurar meu contexto comercial antes de começar.
