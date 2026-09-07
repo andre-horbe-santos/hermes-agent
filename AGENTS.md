@@ -1441,3 +1441,23 @@ not the specific names.
 
 Reviewers should reject new change-detector tests; authors should convert
 them into invariants before re-requesting review.
+
+## Koncepto operational handoff (2026-09-07)
+
+- Current workstream: integrate Resend and determine whether DNS/MX for
+  `konceptogc.com` should remain at Wix or move to Cloudflare.
+- Asana task: `Resend MX` — https://app.asana.com/1/1109524725391952/project/1215200733400133/task/1218212396339643
+- Cloudflare MCP portal at `mcp.andre-santos-b55.workers.dev` returned HTTP 404
+  with error 1042. Do not treat the portal as working until it passes an MCP
+  initialize test.
+- The Cloudflare Access Service Token is `Hermes-agent`; its credentials are
+  stored as `CLOUDFLARE_ACCESS_CLIENT_ID` and
+  `CLOUDFLARE_ACCESS_CLIENT_SECRET` in `~/.hermes/.env`.
+- A Cloudflare API Token is stored as `CLOUDFLARE_API_TOKEN` in
+  `~/.hermes/.env`. It is active, but the Cloudflare API currently finds no
+  `konceptogc.com` zone because authoritative DNS remains at Wix; direct MCP
+  test therefore returns 403 for this DNS use case.
+- Never change nameservers without first inventorying and validating Wix site,
+  email, MX, SPF, DKIM, DMARC, TXT, A, and CNAME records. Migrating DNS does
+  not move the website or email; it moves DNS authority. Keep secrets out of
+  this file, Asana, and documentation.
