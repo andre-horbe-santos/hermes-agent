@@ -1461,3 +1461,14 @@ them into invariants before re-requesting review.
   email, MX, SPF, DKIM, DMARC, TXT, A, and CNAME records. Migrating DNS does
   not move the website or email; it moves DNS authority. Keep secrets out of
   this file, Asana, and documentation.
+
+## Dashboard Koncepto governance
+
+The durable security context and initial inventory for `dashboard.koncepto` are
+maintained in
+[`docs/security/dashboard-koncepto-governance.md`](docs/security/dashboard-koncepto-governance.md).
+Read it before changing the Configurações module (Usuários e Sistema,
+Infraestrutura, or Arquitetura). Do not treat frontend confirmations or local
+profiles as authorization boundaries; sensitive actions must be checked
+server-side, scoped to the correct organization/workspace and environment,
+audited without secrets, and covered by rollback and authorization tests.
