@@ -1,0 +1,3 @@
+[submodule "skills/pty-subagents"]
+	path = skills/pty-subagents
+	url = https://github.com/andre-horbe-santos/hermes-pty-subagents.git
